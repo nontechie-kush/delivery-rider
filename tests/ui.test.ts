@@ -33,7 +33,7 @@ describe("estimate", () => {
     for (const offer of s.offers) {
       const e = estimate(s, offer, E);
       expect(Object.keys(VERDICT_LABEL)).toContain(e.verdict);
-      expect(e.forecast).toBeGreaterThan(0);
+      expect(e.total).toBeGreaterThan(0);
       expect(e.window).toBe(E.tiers[offer.tier].window);
     }
   });
@@ -46,13 +46,13 @@ describe("estimate", () => {
     expect(s.offers.length).toBeGreaterThanOrEqual(2);
 
     const offer = s.offers[0]!;
-    const before = estimate(s, offer, E).forecast;
+    const before = estimate(s, offer, E).total;
 
     const loaded = accept(s, s.offers[1]!.id);
     expect(loaded).toBe(true);
     expect(s.carried.length).toBe(1);
 
-    expect(estimate(s, offer, E).forecast).toBeGreaterThan(before);
+    expect(estimate(s, offer, E).total).toBeGreaterThan(before);
   });
 
   /**
@@ -60,14 +60,18 @@ describe("estimate", () => {
    * prep time the app shows, not the real one. If this ever starts using truePrep,
    * the UI becomes honest and the restaurant-wait mechanic loses its bite.
    */
-  it("forecasts using the shown prep time, not the real one", () => {
+  it("forecasts the wait from the shown prep time, not the real one", () => {
     const s = createShift(3);
-    idle(s, 60);
+    for (let i = 0; i < 40 && !s.offers.some((o) => o.pickupId === "bj"); i++) idle(s, 3);
     const liar = s.offers.find((o) => o.pickupId === "bj");
     if (!liar) return;
-    const honest = estimate(s, liar, E).forecast;
-    const truthful = honest - liar.shownPrep + liar.truePrep;
-    expect(truthful).toBeGreaterThan(honest);
+
+    const e = estimate(s, liar, E);
+    // The forecast wait can never exceed what the app claimed, even though the
+    // real prep is far longer. If this flips, the UI turns honest and the
+    // restaurant-wait mechanic quietly stops existing.
+    expect(e.waitClaimed).toBeLessThanOrEqual(liar.shownPrep + 1e-9);
+    expect(liar.truePrep).toBeGreaterThan(liar.shownPrep);
   });
 });
 

@@ -12,13 +12,27 @@ export const VERDICT_LABEL: Record<Verdict, string> = {
   no: "Won't make it",
 };
 
-/** Rough cost of servicing one order already in the bag before getting to this one. */
-const QUEUE_COST = 13;
+/**
+ * Minutes lost per order already in the bag before this one gets served. Covers
+ * the detour to its stop and the handover, so it is deliberately more than a
+ * straight-line ride — under-counting this is what made everything read as
+ * "Comfortable" in the first pass.
+ */
+const QUEUE_COST = 17;
 
 export interface Estimate {
   verdict: Verdict;
-  /** Forecast minutes to deliver, versus the window allowed. */
-  forecast: number;
+  /** Ride from where the rider is standing to the pickup. */
+  toPickup: number;
+  /** Time still standing around after arriving, per the app's claim. */
+  waitClaimed: number;
+  /** Ride from pickup to the customer. */
+  toDrop: number;
+  /** Delay caused by orders already in the bag. */
+  queue: number;
+  /** Everything above, added up. */
+  total: number;
+  /** Minutes the tier allows, measured from acceptance. */
   window: number;
 }
 
@@ -31,18 +45,20 @@ export interface Estimate {
  * quietly read better here than they deserve to.
  */
 export function estimate(state: ShiftState, order: Order, cfg: EconomyConfig): Estimate {
-  const ride = travelMinutes(state.locationId, order.pickupId);
-  // Prep runs while you ride, so only the remainder is time you actually lose.
-  const waitAfterArriving = Math.max(0, order.shownPrep - ride);
-  const drop = travelMinutes(order.pickupId, order.dropId);
+  const toPickup = travelMinutes(state.locationId, order.pickupId);
+  // Prep runs while the rider is on the way, so only the remainder is lost time.
+  const waitClaimed = Math.max(0, order.shownPrep - toPickup);
+  const toDrop = travelMinutes(order.pickupId, order.dropId);
   const queue = state.carried.length * QUEUE_COST;
 
-  const forecast = queue + ride + waitAfterArriving + drop;
+  const total = queue + toPickup + waitClaimed + toDrop;
   const window = cfg.tiers[order.tier].window;
-  const ratio = forecast / window;
+  const ratio = total / window;
 
+  // Tightened from the first pass, where almost everything read "Comfortable"
+  // and the safe play carried no risk at all.
   const verdict: Verdict =
-    ratio < 0.6 ? "easy" : ratio < 0.85 ? "tight" : ratio < 1.05 ? "risky" : "no";
+    ratio < 0.45 ? "easy" : ratio < 0.7 ? "tight" : ratio < 0.92 ? "risky" : "no";
 
-  return { verdict, forecast, window };
+  return { verdict, toPickup, waitClaimed, toDrop, queue, total, window };
 }

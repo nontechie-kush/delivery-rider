@@ -81,6 +81,12 @@ function milestoneBar(): string {
 
 /* ----------------------------------------------------------------- offers */
 
+const SLOT_NEED: Record<string, string> = {
+  HOT: "Needs a hot slot",
+  COLD: "Needs a cold slot",
+  AMBIENT: "Fits any slot",
+};
+
 function offerCard(orderId: string): string {
   const order = state.offers.find((o) => o.id === orderId);
   if (!order) return "";
@@ -88,27 +94,40 @@ function offerCard(orderId: string): string {
   const est = estimate(state, order, cfg);
   const room = canAccept(state, order.id);
   const expiresIn = order.expiresAt - state.clock;
-  const ride = travelMinutes(state.locationId, order.pickupId);
+  const spare = est.window - est.total;
 
   const tierWord =
     order.tier === "EXPRESS" ? "Express" : order.tier === "STANDARD" ? "Standard" : "Scheduled";
+
+  // Every line names where the time goes. The first pass listed the same numbers
+  // without saying which leg each belonged to, which made them unreadable.
+  const legs = [
+    `<tr><td>Ride to ${esc(node(order.pickupId).name)}</td><td>${mins(est.toPickup)}</td></tr>`,
+    `<tr class="claim"><td>Wait while they make it <em>app's estimate</em></td><td>${
+      est.waitClaimed < 0.5 ? "ready" : mins(est.waitClaimed)
+    }</td></tr>`,
+    `<tr><td>Ride to ${esc(node(order.dropId).name)}</td><td>${mins(est.toDrop)}</td></tr>`,
+    est.queue > 0
+      ? `<tr><td>Orders already in your bag</td><td>+${mins(est.queue)}</td></tr>`
+      : "",
+    `<tr class="sum"><td>Your trip</td><td>${mins(est.total)}</td></tr>`,
+    `<tr class="allow"><td>${tierWord} — time you're given</td><td>${mins(est.window)}</td></tr>`,
+  ].join("");
 
   return `
     <article class="offer ${est.verdict}" data-preview="${esc(order.id)}">
       <div class="offer-top">
         <span class="fee">${rupees(order.fee)}</span>
-        <span class="verdict ${est.verdict}">${VERDICT_LABEL[est.verdict]}</span>
+        <span class="verdict ${est.verdict}">
+          ${VERDICT_LABEL[est.verdict]}
+          <em>${spare > 0 ? `${mins(spare)} spare` : `${mins(-spare)} over`}</em>
+        </span>
       </div>
 
-      <p class="trip">
-        Pick up at <b>${esc(node(order.pickupId).name)}</b><br>
-        Take it to <b>${esc(node(order.dropId).name)}</b>
-      </p>
+      <table class="legs">${legs}</table>
 
-      <p class="detail">
-        ${tierWord} · ${mins(cfg.tiers[order.tier].window)} to deliver ·
-        ${mins(ride)} ride · about ${mins(order.shownPrep)} wait ·
-        ${order.temp.toLowerCase()}
+      <p class="slotneed ${room ? "" : "blocked"}">
+        ${SLOT_NEED[order.temp] ?? ""}${room ? "" : " — no room in your bag"}
       </p>
 
       <div class="offer-actions">
@@ -213,6 +232,25 @@ function moveSection(): string {
     </section>`;
 }
 
+/**
+ * The last few things that happened. Without this the app's under-reported prep
+ * times are undetectable — the player waits twenty minutes after being told six
+ * and reads it as a bug rather than as the platform lying to them.
+ */
+function recentSection(): string {
+  const lines = state.log.slice(-4).reverse();
+  if (lines.length === 0) return "";
+
+  const items = lines
+    .map((l, i) => {
+      const flagged = l.includes("the app said") || l.includes("late");
+      return `<li class="${i === 0 ? "newest" : ""} ${flagged ? "flag" : ""}">${esc(l)}</li>`;
+    })
+    .join("");
+
+  return `<section><h2>Just now</h2><ul class="recent">${items}</ul></section>`;
+}
+
 /* ----------------------------------------------------------------- summary */
 
 function summary(): string {
@@ -256,6 +294,7 @@ function render(): void {
     milestoneBar(),
     `<div class="mapwrap">${renderMap(state, preview)}</div>`,
     moveSection(),
+    recentSection(),
     offersSection(),
     carryingSection(),
   ].join("");

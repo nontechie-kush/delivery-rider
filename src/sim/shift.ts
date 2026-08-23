@@ -121,7 +121,7 @@ export function accept(state: ShiftState, id: string): boolean {
 
   state.offers = state.offers.filter((o) => o.id !== id);
   state.carried.push({ order, leg: "TO_PICKUP", pickedUpAt: null, waited: 0 });
-  state.log.push(`[${fmt(state.clock)}] took ${order.id} ${order.tier} → ${node(order.dropId).name}`);
+  state.log.push(`Took a ${order.tier.toLowerCase()} order to ${node(order.dropId).name}, ₹${order.fee}.`);
   return true;
 }
 
@@ -145,7 +145,7 @@ export function travelTo(state: ShiftState, destId: string): void {
   const minutes = travelMinutes(state.locationId, destId);
   advance(state, minutes);
   state.locationId = destId;
-  state.log.push(`[${fmt(state.clock)}] rode to ${node(destId).name} (${minutes.toFixed(0)}m)`);
+  state.log.push(`Rode to ${node(destId).name}, ${minutes.toFixed(0)} min.`);
   collectAndDeliver(state);
 }
 
@@ -158,11 +158,18 @@ function collectAndDeliver(state: ShiftState): void {
   if (toCollect.length > 0) {
     const arrivedAt = state.clock;
     // Wait for the slowest one. This is where the app's optimism gets paid for.
-    const latest = Math.max(...toCollect.map((c) => readyAt(c.order)));
+    const slowest = toCollect.reduce((a, b) => (readyAt(a.order) > readyAt(b.order) ? a : b));
+    const latest = readyAt(slowest.order);
     if (latest > arrivedAt) {
-      advance(state, latest - arrivedAt);
+      const waited = latest - arrivedAt;
+      advance(state, waited);
+      // Name the gap explicitly. A lie the player cannot detect reads as a bug,
+      // not as a mechanic — this is the line that teaches them who to distrust.
+      const claimed = Math.max(0, slowest.order.shownPrep - (arrivedAt - slowest.order.offeredAt));
+      const gap = waited - claimed;
       state.log.push(
-        `[${fmt(state.clock)}] waited ${(latest - arrivedAt).toFixed(0)}m at ${node(state.locationId).name}`,
+        `Waited ${waited.toFixed(0)} min at ${node(state.locationId).name}` +
+          (gap > 1.5 ? ` — the app said ${claimed.toFixed(0)}.` : "."),
       );
     }
     for (const c of toCollect) {
@@ -195,7 +202,9 @@ function collectAndDeliver(state: ShiftState): void {
 
     unload(state.bag, c.order.id);
     state.log.push(
-      `[${fmt(state.clock)}] delivered ${c.order.id} ₹${paid}${late ? ` LATE by ${lateBy.toFixed(0)}m` : ""}`,
+      late
+        ? `Delivered to ${node(c.order.dropId).name} ${lateBy.toFixed(0)} min late — half pay, ₹${paid}, and no bonus credit.`
+        : `Delivered to ${node(c.order.dropId).name} on time. ₹${paid}.`,
     );
   }
 

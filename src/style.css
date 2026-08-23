@@ -200,10 +200,29 @@ button.quiet { color: var(--dim); background: transparent; }
 .verdict.risky { color: var(--amber); }
 .verdict.no { color: var(--red); }
 
-.trip { margin: 7px 0 5px; font-size: 14.5px; line-height: 1.45; }
-.trip b { font-weight: 600; }
+.verdict em { display: block; font-style: normal; font-weight: 400; font-size: 11px; color: var(--dim); margin-top: 2px; }
 
-.detail { margin: 0 0 10px; font-size: 12px; color: var(--dim); }
+/* Itemised trip. Every row says which leg the minutes belong to — the first
+   pass listed the same numbers unlabelled and nobody could read them. */
+.legs { width: 100%; border-collapse: collapse; margin: 9px 0 8px; font-size: 13.5px; }
+.legs td { padding: 3px 0; vertical-align: baseline; }
+.legs td:last-child { text-align: right; color: var(--dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.legs em { font-style: normal; font-size: 11px; color: var(--dim); margin-left: 5px; }
+.legs tr.claim td:last-child { color: var(--amber); }
+.legs tr.sum td { border-top: 1px solid var(--line); padding-top: 6px; font-weight: 600; }
+.legs tr.sum td:last-child { color: var(--text); }
+.legs tr.allow td { color: var(--dim); }
+
+.slotneed { margin: 0 0 10px; font-size: 12px; color: var(--dim); }
+.slotneed.blocked { color: var(--red); }
+
+/* -------------------------------------------------------------- just now */
+
+.recent { list-style: none; margin: 0; padding: 0; font-size: 13px; }
+.recent li { padding: 5px 0; color: var(--dim); border-bottom: 1px solid var(--line); }
+.recent li:last-child { border-bottom: 0; }
+.recent li.newest { color: var(--text); }
+.recent li.flag { color: var(--amber); }
 
 .offer-actions { display: flex; align-items: center; gap: 8px; }
 .offer-actions .take { border-color: var(--green); color: var(--green); font-weight: 600; }

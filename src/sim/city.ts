@@ -11,15 +11,16 @@ import type { CityNode, Pickup } from "./types.js";
  * Brands are invented. Real ones are a trademark problem and satire is worth more.
  */
 export const PICKUPS: readonly Pickup[] = [
-  // Dark store: fast and nearly honest. This is where EXPRESS orders come from.
-  { id: "qk", name: "QuickKart Dark Store", kind: "PICKUP", x: 2, y: 3, prepMean: 3, prepSpread: 2, optimism: 0.15 },
-  // The liar. Long prep, and the app shows you less than half of it.
-  // Prep has to exceed typical travel time or the rider never actually waits and
-  // the whole under-reporting mechanic becomes invisible.
-  { id: "bj", name: "Biryani Junction", kind: "PICKUP", x: 4, y: 4, prepMean: 15, prepSpread: 6, optimism: 0.55 },
-  { id: "fc", name: "Filter Coffee Co", kind: "PICKUP", x: 3, y: 6, prepMean: 9, prepSpread: 4, optimism: 0.25 },
-  // Out of the way, moderate wait.
-  { id: "gm", name: "Green Mart", kind: "PICKUP", x: 7, y: 2, prepMean: 11, prepSpread: 4, optimism: 0.3 },
+  // A dark store picks packaged goods off a shelf. Genuinely two or three
+  // minutes, and it barely needs to lie about it. This is why EXPRESS can exist.
+  { id: "qk", name: "QuickKart Dark Store", kind: "PICKUP", x: 2, y: 3, prepMean: 3, prepSpread: 1.5, optimism: 0.12 },
+  // Biryani is cooked to order. Twenty-odd minutes is the honest number, and the
+  // app shows you less than half of it — which is the whole mechanic.
+  { id: "bj", name: "Biryani Junction", kind: "PICKUP", x: 4, y: 4, prepMean: 22, prepSpread: 8, optimism: 0.55 },
+  // Coffee and a snack: quick, and roughly honest about it.
+  { id: "fc", name: "Filter Coffee Co", kind: "PICKUP", x: 3, y: 6, prepMean: 8, prepSpread: 3, optimism: 0.2 },
+  // Someone has to walk a supermarket basket. Out of the way, and it adds up.
+  { id: "gm", name: "Green Mart", kind: "PICKUP", x: 7, y: 2, prepMean: 13, prepSpread: 5, optimism: 0.35 },
 ] as const;
 
 export const DROPS: readonly CityNode[] = [
