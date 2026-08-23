@@ -13,9 +13,9 @@ describe("orderFee", () => {
     expect(orderFee("STANDARD", 2, E)).toBe(E.tiers.STANDARD.base);
   });
 
-  it("charges per unit beyond the free distance", () => {
-    // 5 units, 2 free, 3 billable at 6/unit = 22 + 18
-    expect(orderFee("STANDARD", 5, E)).toBe(40);
+  it("charges per kilometre beyond the free distance", () => {
+    // 5 km, 2 free, 3 billable at ₹7/km = 22 + 21
+    expect(orderFee("STANDARD", 5, E)).toBe(43);
   });
 
   it("never goes negative on a zero-distance order", () => {

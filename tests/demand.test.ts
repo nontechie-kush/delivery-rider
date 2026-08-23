@@ -11,10 +11,10 @@ import { createShift, idle, rideMinutes } from "../src/sim/shift.js";
 const at = (hour: number) => (hour - E.startHour) * 60 + 30;
 
 describe("the shift clock", () => {
-  it("starts at noon and runs to eleven", () => {
-    expect(E.startHour).toBe(12);
-    expect(hourAt(0, E)).toBe(12);
-    expect(hourAt(E.shiftMinutes - 1, E)).toBe(22);
+  it("starts at one and runs to ten", () => {
+    expect(E.startHour).toBe(13);
+    expect(hourAt(0, E)).toBe(13);
+    expect(hourAt(E.shiftMinutes - 1, E)).toBe(21);
   });
 
   /**
@@ -75,9 +75,9 @@ describe("expenses", () => {
   it("charges roughly a third of gross, matching measured rider costs", () => {
     // Sanity band rather than a fixed number, so tuning does not break it but a
     // structural mistake does. Measured reality is 32% of gross.
-    const perUnit = E.expensePerUnit;
-    const typicalUnits = 200; // a full shift of riding
-    const cost = E.shiftExpenses + typicalUnits * perUnit;
+    const perKm = E.expensePerKm;
+    const typicalKm = 90; // a full shift of riding, per measured 70-100 km
+    const cost = E.shiftExpenses + typicalKm * perKm;
     expect(cost).toBeGreaterThan(300);
     expect(cost).toBeLessThan(900);
   });

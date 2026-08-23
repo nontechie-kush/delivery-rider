@@ -11,15 +11,15 @@ import type { Tier } from "./types.js";
 export interface TierConfig {
   /** Flat fee for accepting at all. */
   base: number;
-  /** Rupees per grid unit beyond `freeUnits`. */
-  perUnit: number;
-  /** Distance covered by the base fee. */
-  freeUnits: number;
+  /** Rupees per kilometre beyond `freeKm`. */
+  perKm: number;
+  /** Kilometres covered by the base fee. */
+  freeKm: number;
   /** Game-minutes from acceptance until the order is late. */
   window: number;
   /** Relative frequency in the offer queue. */
   weight: number;
-  /** Orders longer than this are never generated at this tier. */
+  /** Orders longer than this many km are never generated at this tier. */
   maxDistance: number;
 }
 
@@ -42,16 +42,17 @@ export interface EconomyConfig {
   offerIntervalMean: number;
   /** Fixed cost deducted at end of shift — phone data, the daily bag rental. */
   shiftExpenses: number;
-  /** Fuel, servicing and wear, charged per grid unit actually ridden. */
-  expensePerUnit: number;
+  /** Fuel, servicing and wear, charged per kilometre actually ridden. */
+  expensePerKm: number;
 }
 
 /**
- * Noon to eleven. The shift has to straddle both peaks or the demand curve does
- * no work: the lunch crush, the dead afternoon where the decision is whether to
- * rest or reposition, and the evening block that decides the milestone.
+ * One in the afternoon to ten at night. The shift has to straddle both peaks or
+ * the demand curve does no work: the tail of the lunch crush, the dead afternoon
+ * where the decision is whether to rest or reposition, and the evening block
+ * that decides the milestone.
  */
-const SHIFT_START_HOUR = 12;
+const SHIFT_START_HOUR = 13;
 
 /**
  * Real order volume is nothing like flat. Platform data puts the lunch peak at
@@ -77,8 +78,10 @@ const TRAFFIC_BY_HOUR: readonly number[] = [
 ];
 
 export const DEFAULT_ECONOMY: EconomyConfig = {
-  // Eleven hours, noon to 23:00. Long, but real full-timers average 62-hour weeks.
-  shiftMinutes: 660,
+  // Nine hours, 13:00 to 22:00. Real riders average 8-13 hour days and only 23%
+  // work past eight, so this sits at the busy end of normal without being a
+  // fantasy of endurance.
+  shiftMinutes: 540,
   startHour: SHIFT_START_HOUR,
   demandByHour: DEMAND_BY_HOUR,
   trafficByHour: TRAFFIC_BY_HOUR,
@@ -86,10 +89,10 @@ export const DEFAULT_ECONOMY: EconomyConfig = {
   tiers: {
     // Pays roughly double per minute, with a quarter of the slack.
     // Dark store only, short hops only — the "10 minute" promise made survivable.
-    EXPRESS: { base: 30, perUnit: 7, freeUnits: 1, window: 24, weight: 3, maxDistance: 4.5 },
-    STANDARD: { base: 22, perUnit: 6, freeUnits: 2, window: 52, weight: 5, maxDistance: 99 },
+    EXPRESS: { base: 30, perKm: 8, freeKm: 1, window: 24, weight: 3, maxDistance: 4 },
+    STANDARD: { base: 22, perKm: 7, freeKm: 2, window: 52, weight: 5, maxDistance: 8 },
     // Boring, safe, and it occupies a slot for a very long time. That is the cost.
-    SCHEDULED: { base: 16, perUnit: 5, freeUnits: 3, window: 95, weight: 2, maxDistance: 99 },
+    SCHEDULED: { base: 16, perKm: 6, freeKm: 3, window: 95, weight: 2, maxDistance: 99 },
   },
 
   // Straight from the platform rate cards. The step function is the whole game:
@@ -107,15 +110,18 @@ export const DEFAULT_ECONOMY: EconomyConfig = {
   latePayFactor: 0.5,
   offerLifetime: 12,
   // Gap at demand 1.0. The curve divides this, so the lunch peak runs ~4x faster.
-  // Swept in tools/sweep.ts: 19 puts a good rider at ~27 orders and ~₹86/hour
-  // against a measured ₹75, and leaves the 28-order bonus at roughly a third of
-  // shifts — a stretch rather than a formality.
-  offerIntervalMean: 19,
+  // Swept in tools/sweep.ts against the field data: 23 puts a good rider at
+  // ~27 orders over ~95 km, both inside the measured 20-30 and 70-100 bands, at
+  // ₹97/hour against a measured ₹75. Incentive lands at 52% of gross, which is
+  // about what the real rate cards produce. The 28-order bonus falls to a third
+  // of shifts — a stretch rather than a formality.
+  offerIntervalMean: 23,
   // Measured expenses are 32% of gross, and almost all of it is distance. A flat
-  // charge made the vehicle choice meaningless; per-unit is what gives the cycle
-  // its zero-fuel advantage and the petrol bike its bleed.
-  shiftExpenses: 60,
-  expensePerUnit: 2.5,
+  // charge made the vehicle choice meaningless; per-kilometre is what gives the
+  // cycle its zero-fuel advantage and the petrol bike its bleed. Petrol, service
+  // and tyres on a two-wheeler run about ₹3-4 a kilometre all-in.
+  shiftExpenses: 80,
+  expensePerKm: 4,
 };
 
 /** Clock hour (0–23) at a given point in the shift. */
@@ -136,8 +142,8 @@ export function trafficAt(minutes: number, cfg: EconomyConfig): number {
 /** Base + distance pay for one order, before lateness is applied. */
 export function orderFee(tier: Tier, distance: number, cfg: EconomyConfig): number {
   const t = cfg.tiers[tier];
-  const billable = Math.max(0, distance - t.freeUnits);
-  return Math.round(t.base + billable * t.perUnit);
+  const billable = Math.max(0, distance - t.freeKm);
+  return Math.round(t.base + billable * t.perKm);
 }
 
 /** What the order actually pays given whether it landed on time. */

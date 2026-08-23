@@ -1,5 +1,5 @@
 import { load, makeBag, fits, unload } from "./bag.js";
-import { BIKE_MIN_PER_UNIT, START_NODE_ID, distance, node, travelMinutes } from "./city.js";
+import { BIKE_MIN_PER_KM, START_NODE_ID, distance, node, travelMinutes } from "./city.js";
 import {
   DEFAULT_ECONOMY,
   demandAt,
@@ -40,7 +40,7 @@ export interface ShiftState {
   dropped: Order[];
   seq: number;
   nextOfferAt: number;
-  /** Grid units ridden this shift. Expenses are charged against this. */
+  /** Kilometres ridden this shift. Expenses are charged against this. */
   unitsRidden: number;
   log: string[];
 }
@@ -59,7 +59,7 @@ export interface ShiftSummary {
   /** How much of that waiting the app never showed. */
   minutesWaitingHidden: number;
   undelivered: number;
-  /** Grid units ridden, roughly 0.7 km each. */
+  /** Kilometres ridden. */
   unitsRidden: number;
 }
 
@@ -92,7 +92,9 @@ export function isOver(state: ShiftState): boolean {
 function refreshOffers(state: ShiftState): void {
   while (state.nextOfferAt <= state.clock && state.nextOfferAt < state.cfg.shiftMinutes) {
     state.seq += 1;
-    state.offers.push(generateOrder(state.rng, state.nextOfferAt, state.seq, state.cfg));
+    state.offers.push(
+      generateOrder(state.rng, state.nextOfferAt, state.seq, state.cfg, state.locationId),
+    );
     state.nextOfferAt += nextOfferGap(
       state.rng,
       state.cfg,
@@ -170,7 +172,7 @@ export function travelTo(state: ShiftState, destId: string): void {
  * matching what the ride actually costs during the evening block.
  */
 export function rideMinutes(state: ShiftState, fromId: string, toId: string): number {
-  return travelMinutes(fromId, toId, BIKE_MIN_PER_UNIT * trafficAt(state.clock, state.cfg));
+  return travelMinutes(fromId, toId, BIKE_MIN_PER_KM * trafficAt(state.clock, state.cfg));
 }
 
 /** Current clock hour, for anything that needs to show the player the time of day. */
@@ -206,6 +208,8 @@ function collectAndDeliver(state: ShiftState): void {
           (gap > 1.5 ? ` — the app said ${claimed.toFixed(0)}.` : "."),
       );
     }
+    // Bagging it up, even when it was ready and waiting.
+    advance(state, node(state.locationId).handover);
     for (const c of toCollect) {
       c.leg = "TO_DROP";
       c.pickedUpAt = state.clock;
@@ -218,6 +222,11 @@ function collectAndDeliver(state: ShiftState): void {
   const toDeliver = state.carried.filter(
     (c) => c.leg === "TO_DROP" && c.order.dropId === state.locationId,
   );
+
+  // The door itself: the guard, the lift, the floor, the phone call. Charged
+  // once per visit rather than per parcel, which is part of why batching to a
+  // shared drop pays.
+  if (toDeliver.length > 0) advance(state, node(state.locationId).handover);
 
   for (const c of toDeliver) {
     const late = state.clock > c.order.dueAt;
@@ -261,7 +270,7 @@ export function endShift(state: ShiftState): ShiftSummary {
   // Measured at 32% of gross, and nearly all of it is distance. Charging it per
   // unit ridden is what will make the cycle-versus-petrol choice mean something.
   const expenses = Math.round(
-    state.cfg.shiftExpenses + state.unitsRidden * state.cfg.expensePerUnit,
+    state.cfg.shiftExpenses + state.unitsRidden * state.cfg.expensePerKm,
   );
   const minutesWaiting = state.completed.reduce((sum, c) => sum + c.waited, 0);
   const minutesWaitingHidden = state.completed.reduce(

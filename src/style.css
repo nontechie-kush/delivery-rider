@@ -63,7 +63,59 @@ body {
   justify-content: center;
   padding: 10px 10px 0;
 }
-.maplayer .map { width: 100%; max-height: 100%; }
+.maplayer .map { width: 100%; height: 100%; touch-action: manipulation; }
+
+/* Map of Gurgaon. Stroke widths are in kilometres because the SVG is drawn in
+   projected km, so everything scales with the viewBox rather than the screen. */
+.map .road { fill: none; stroke: #1e2521; stroke-width: 0.34; stroke-linecap: round; stroke-linejoin: round; }
+.map .road.major { stroke: #27302a; stroke-width: 0.5; }
+
+.map .leg { stroke-width: 0.13; stroke-dasharray: 0.4 0.32; opacity: 0.9; }
+.map .leg.ok { stroke: var(--brand-deep); }
+.map .leg.soon { stroke: var(--amber); }
+.map .leg.late { stroke: var(--red); }
+
+.map .preview { stroke: var(--dim); stroke-width: 0.1; stroke-dasharray: 0.22 0.26; }
+.map .preview.solid { stroke: var(--text); stroke-width: 0.15; stroke-dasharray: none; }
+
+.map .node { cursor: pointer; }
+.map .hit { fill: transparent; }
+.map .pip { fill: #39433c; stroke: #4c574f; stroke-width: 0.07; }
+.map .pickup .pip { fill: #2f3f4a; stroke: #47606f; }
+
+.map .name {
+  font-size: 0.52px;
+  font-weight: 600;
+  fill: var(--dimmer);
+  text-anchor: middle;
+  font-family: inherit;
+  pointer-events: none;
+  paint-order: stroke;
+  stroke: rgba(10, 12, 11, 0.85);
+  stroke-width: 0.18px;
+}
+.map .badge {
+  font-size: 0.5px;
+  font-weight: 800;
+  fill: #0a0c0b;
+  text-anchor: middle;
+  pointer-events: none;
+}
+
+.map .pending .pip { fill: var(--brand); stroke: none; }
+.map .pending.soon .pip { fill: var(--amber); }
+.map .pending.late .pip { fill: var(--red); }
+.map .pending .name { fill: var(--text); }
+
+.map .here .pip { fill: #0a0c0b; stroke: var(--brand); stroke-width: 0.2; }
+.map .here .name { fill: var(--text); font-weight: 800; }
+
+.map .pv-pickup .pip { fill: var(--text); stroke: none; }
+.map .pv-drop .pip { fill: #0a0c0b; stroke: var(--text); stroke-width: 0.16; }
+
+.map .node:hover .pip { stroke: var(--text); stroke-width: 0.12; }
+.map .node:focus-visible { outline: none; }
+.map .node:focus-visible .pip { stroke: var(--brand); stroke-width: 0.2; }
 
 /* Floating status pill — duty state and earnings, always visible, never over
    the part of the map that matters. */

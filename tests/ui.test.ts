@@ -91,7 +91,7 @@ describe("renderMap", () => {
     const s = createShift(7);
     idle(s, 40);
     accept(s, s.offers[0]!.id);
-    expect(renderMap(s, null)).toContain('class="route');
+    expect(renderMap(s, null)).toContain('class="leg ');
   });
 
   it("draws the preview line only when an offer is being considered", () => {
@@ -120,8 +120,8 @@ describe("routeStack", () => {
     const html = routeStack("qk", "d1");
     expect(html).toContain("stop pickup");
     expect(html).toContain("stop drop");
-    expect(html).toContain("QuickKart Dark Store");
-    expect(html).toContain("Silver Oaks Apts");
+    expect(html).toContain("QuickKart");
+    expect(html).toContain("Huda City Centre");
   });
 
   it("strikes the pickup once it has been collected", () => {

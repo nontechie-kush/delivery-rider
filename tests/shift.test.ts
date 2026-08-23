@@ -188,7 +188,7 @@ describe("endShift", () => {
     expect(sum.milestones).toBe(0);
     // Fixed daily cost plus fuel and wear over the distance actually covered.
     expect(sum.expenses).toBe(
-      Math.round(E.shiftExpenses + sum.unitsRidden * E.expensePerUnit),
+      Math.round(E.shiftExpenses + sum.unitsRidden * E.expensePerKm),
     );
     expect(sum.expenses).toBeGreaterThan(E.shiftExpenses);
     expect(sum.net).toBe(sum.fees + sum.milestones - sum.expenses);

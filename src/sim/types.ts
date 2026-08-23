@@ -11,7 +11,15 @@ export type NodeKind = "PICKUP" | "DROP";
 export interface CityNode {
   id: string;
   name: string;
+  /** The real Gurgaon neighbourhood this sits in. */
+  area: string;
   kind: NodeKind;
+  /**
+   * Minutes lost at the door on arrival — the lift, the guard, the gate, the
+   * customer who does not pick up. Real deliveries burn three to six minutes
+   * here and platforms count none of it. High-rise blocks are the worst.
+   */
+  handover: number;
   /** Grid coordinates. Travel time is derived from these, never stored. */
   x: number;
   y: number;

@@ -10,7 +10,8 @@ import { estimate, VERDICT_LABEL } from "./verdict.js";
  * about composition and sheet mechanics rather than markup.
  */
 
-const km = (units: number): string => `${(units * 0.7).toFixed(1)} km`;
+/** Distances are already kilometres — the projection does the work. */
+const km = (v: number): string => `${v.toFixed(1)} km`;
 
 const SLOT_NEED: Record<string, string> = {
   HOT: "Hot bag",

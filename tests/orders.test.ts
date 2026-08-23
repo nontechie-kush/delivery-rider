@@ -6,7 +6,7 @@ import { makeRng } from "../src/sim/rng.js";
 
 function sample(count: number, seed = 42) {
   const rng = makeRng(seed);
-  return Array.from({ length: count }, (_, i) => generateOrder(rng, i * 5, i, E));
+  return Array.from({ length: count }, (_, i) => generateOrder(rng, i * 5, i, E, "qk"));
 }
 
 describe("generateOrder", () => {
