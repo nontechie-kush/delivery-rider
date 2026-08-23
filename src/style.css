@@ -1,23 +1,31 @@
 /*
- * Phase 0 UI. Still not "art" — but it has to be legible, because an unreadable
- * prototype tests the player's patience rather than the decision.
+ * NOW Partner — rider app skin.
  *
- * Three rules doing most of the work:
- *   1. One accent (green) means money and safety. Amber means hurry. Red means late.
- *   2. Numbers the player would otherwise have to add up are shown as a verdict.
- *   3. The map answers "do these share a route?" so the text never has to.
+ * Built in the grammar every rider app shares rather than any one brand's
+ * identity: duty state on top, earnings as the biggest number on screen, an
+ * incentive strip, and order cards built around a stacked pickup-to-drop route.
+ *
+ * Design rules doing the work:
+ *   1. Brand mint means money and go. Amber means hurry. Red means late.
+ *   2. Chrome is near-black so the app reads on a phone clamped to a handlebar.
+ *   3. Nothing is decorative — every element is one a real rider app carries.
  */
 :root {
-  --bg: #10130f;
-  --card: #191d17;
-  --card-2: #20251d;
-  --line: #2c322a;
-  --text: #e8ebe3;
-  --dim: #929a8c;
-  --green: #5fd497;
-  --green-dim: #2a5f45;
-  --amber: #e0ab52;
-  --red: #ef7a67;
+  --chrome: #0a0c0b;
+  --bg: #101312;
+  --card: #171b19;
+  --card-2: #1e2320;
+  --line: #2a302c;
+  --line-soft: #212623;
+  --text: #eef1ec;
+  --dim: #8b948c;
+  --dimmer: #5f6862;
+
+  --brand: #00e39b;
+  --brand-deep: #064d38;
+  --amber: #ffb02e;
+  --red: #ff6a52;
+
   color-scheme: dark;
 }
 
@@ -27,263 +35,358 @@ html, body { margin: 0; background: var(--bg); }
 
 body {
   color: var(--text);
-  font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  padding: 0 14px 40px;
+  font: 15px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  padding: 0 0 86px;
   -webkit-font-smoothing: antialiased;
 }
 
-#app { max-width: 560px; margin: 0 auto; }
+#app { max-width: 460px; margin: 0 auto; min-height: 100vh; background: var(--bg); }
 
 h2 {
   font-size: 11px;
-  letter-spacing: 0.13em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--dim);
-  font-weight: 600;
-  margin: 22px 0 8px;
+  font-weight: 700;
+  margin: 0 0 9px;
   display: flex;
+  align-items: center;
+  gap: 8px;
+}
+h2 .count {
+  margin-left: auto;
+  background: var(--card-2);
+  color: var(--dim);
+  border-radius: 10px;
+  padding: 1px 8px;
+  font-size: 10.5px;
+  letter-spacing: 0;
+}
+
+.block { padding: 16px 14px 0; }
+.empty { color: var(--dimmer); font-size: 14px; margin: 0; padding: 14px 0; }
+
+/* ------------------------------------------------------------ app chrome */
+
+.statusbar {
+  background: var(--chrome);
+  padding: 10px 14px 9px;
+  display: flex;
+  align-items: center;
   justify-content: space-between;
-  align-items: baseline;
 }
-h2 .cap { letter-spacing: 0; text-transform: none; font-weight: 400; }
+.brand { font-size: 15px; font-weight: 800; letter-spacing: 0.06em; color: var(--brand); }
+.brand em { font-style: normal; font-weight: 500; color: var(--dim); letter-spacing: 0.04em; font-size: 12px; }
+.sig { color: var(--dimmer); font-size: 11px; letter-spacing: 2px; }
 
-.empty { color: var(--dim); font-size: 14px; margin: 0; }
-
-/* ------------------------------------------------------------------ top bar */
-
-.top {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 4px 16px;
-  padding: 16px 0 10px;
-  position: sticky;
-  top: 0;
-  background: var(--bg);
-  z-index: 5;
+.duty {
+  background: var(--chrome);
+  border-bottom: 1px solid var(--line);
+  padding: 0 14px 11px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
 }
-.top b { font-size: 26px; font-weight: 650; letter-spacing: -0.02em; display: block; line-height: 1.1; }
-.top span { font-size: 12px; color: var(--dim); }
-.cash { text-align: right; }
-.cash b { color: var(--green); }
+.online { color: var(--brand); font-weight: 600; display: flex; align-items: center; gap: 6px; }
+.online i { width: 7px; height: 7px; border-radius: 50%; background: var(--brand); box-shadow: 0 0 0 3px rgba(0, 227, 155, 0.18); }
+.duty .time { color: var(--dim); font-variant-numeric: tabular-nums; }
+.duty .demand { margin-left: auto; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; font-size: 10.5px; color: var(--dim); }
+.duty .demand.hot { color: var(--red); }
+.duty .demand.warm { color: var(--amber); }
+.duty .demand.cold { color: var(--dimmer); }
 
-/* Day bar doubles as the demand curve — one tick per hour, tall where the
-   orders are, with a marker for now. Rules live here only; do not re-declare. */
-.daybar {
-  grid-column: 1 / -1;
+/* ------------------------------------------------------------- earnings */
+
+.earnings { background: var(--chrome); padding: 15px 14px 14px; }
+.earnings .label { font-size: 10.5px; letter-spacing: 0.11em; text-transform: uppercase; color: var(--dimmer); font-weight: 600; }
+.earnings .amt {
+  font-size: 40px;
+  font-weight: 750;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+  margin: 2px 0 6px;
+  font-variant-numeric: tabular-nums;
+}
+.subline { display: flex; gap: 14px; font-size: 12px; color: var(--dim); }
+
+/* The day bar is also the demand curve, so the evening rush is visible before
+   it lands. Knowing what is coming is most of the skill this game teaches. */
+.daycurve {
   position: relative;
-  height: 24px;
-  background: #0d100c;
-  border: 1px solid var(--line);
-  margin-top: 8px;
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 26px;
+  margin-top: 11px;
 }
-.daybar .peak { position: absolute; bottom: 0; background: var(--line); }
-.daybar .now { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--green); }
+.daycurve i { flex: 1; background: var(--line); border-radius: 1px; }
+.daycurve .nowline { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--brand); }
 
-/* ---------------------------------------------------------------- milestone */
+/* ------------------------------------------------------------ incentive */
 
-.goal {
+.incentive {
+  margin: 12px 14px 0;
   background: var(--card);
   border: 1px solid var(--line);
-  border-left: 3px solid var(--green-dim);
-  padding: 12px 14px;
-  margin-bottom: 14px;
+  border-left: 3px solid var(--brand-deep);
+  padding: 11px 13px 10px;
 }
-.goal.close { border-left-color: var(--amber); }
-.goal.done { border-left-color: var(--green); }
+.incentive.close { border-left-color: var(--amber); }
+.incentive.cleared { border-left-color: var(--brand); display: flex; justify-content: space-between; align-items: baseline; }
+.incentive.cleared b { font-size: 14px; }
+.incentive.cleared span { font-size: 12px; color: var(--dim); }
 
-.goal-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
-.goal-head b { font-size: 17px; font-weight: 600; }
-.goal.close .goal-head b { color: var(--amber); }
-.goal-head span, .goal.done span { font-size: 13px; color: var(--dim); }
+.inc-head { display: flex; justify-content: space-between; align-items: baseline; }
+.inc-head b { font-size: 15px; font-weight: 650; }
+.inc-head span { font-size: 16px; font-weight: 700; color: var(--brand); font-variant-numeric: tabular-nums; }
+.incentive.close .inc-head b { color: var(--amber); }
 
-.track { height: 8px; background: #0d100c; border: 1px solid var(--line); margin: 9px 0 5px; }
-.track i { display: block; height: 100%; background: var(--green); }
-.goal.close .track i { background: var(--amber); }
+.incentive .bar { height: 6px; background: #0a0d0b; border-radius: 3px; margin: 8px 0 5px; overflow: hidden; }
+.incentive .bar i { display: block; height: 100%; background: var(--brand); }
+.incentive.close .bar i { background: var(--amber); }
+.inc-foot { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--dimmer); }
 
-.goal-foot { display: flex; justify-content: space-between; font-size: 11px; color: var(--dim); }
+/* ------------------------------------------------------------------ map */
 
-/* --------------------------------------------------------------------- map */
-
-.mapwrap { background: var(--card); border: 1px solid var(--line); padding: 4px; }
+.mapblock { padding: 12px 14px 0; }
+.maptoggle {
+  width: 100%;
+  background: var(--card);
+  border: 1px solid var(--line);
+  color: var(--dim);
+  font: inherit;
+  font-size: 12px;
+  padding: 8px 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.mapblock.open .maptoggle { border-bottom: 0; }
+.mapwrap { background: var(--card); border: 1px solid var(--line); border-top: 0; padding: 4px; }
 .map { display: block; width: 100%; height: auto; touch-action: manipulation; }
 
-.map .grid { stroke: #1c211a; stroke-width: 0.035; }
+.map .grid { stroke: #1a1f1c; stroke-width: 0.035; }
 .map .route { stroke-width: 0.09; stroke-dasharray: 0.3 0.25; opacity: 0.85; }
-.map .route.ok { stroke: var(--green-dim); }
+.map .route.ok { stroke: var(--brand-deep); }
 .map .route.soon { stroke: var(--amber); }
 .map .route.late { stroke: var(--red); }
-
 .map .preview { stroke: var(--dim); stroke-width: 0.07; stroke-dasharray: 0.15 0.2; }
 .map .preview.solid { stroke: var(--text); stroke-width: 0.11; stroke-dasharray: none; }
-
 .map .node { cursor: pointer; }
 .map .hit { fill: transparent; }
-.map .pip { fill: #39412f; stroke: #4a5440; stroke-width: 0.05; }
-.map .pickup .pip { fill: #2f3a45; stroke: #47576a; }
-.map .name {
-  font-size: 0.42px;
-  fill: var(--dim);
-  text-anchor: middle;
-  font-family: ui-sans-serif, system-ui, sans-serif;
-  pointer-events: none;
-}
-.map .count {
-  font-size: 0.45px;
-  font-weight: 700;
-  fill: #10130f;
-  text-anchor: middle;
-  pointer-events: none;
-}
-
-.map .pending .pip { fill: var(--green); stroke: none; }
+.map .pip { fill: #333a35; stroke: #454e48; stroke-width: 0.05; }
+.map .pickup .pip { fill: #2c3a44; stroke: #445866; }
+.map .name { font-size: 0.42px; fill: var(--dimmer); text-anchor: middle; font-family: inherit; pointer-events: none; }
+.map .count { font-size: 0.45px; font-weight: 700; fill: #0a0c0b; text-anchor: middle; pointer-events: none; }
+.map .pending .pip { fill: var(--brand); stroke: none; }
 .map .pending.soon .pip { fill: var(--amber); }
 .map .pending.late .pip { fill: var(--red); }
 .map .pending .name { fill: var(--text); }
-
 .map .here .pip { fill: none; stroke: var(--text); stroke-width: 0.16; }
 .map .here .name { fill: var(--text); font-weight: 700; }
-
 .map .preview-pickup .pip { fill: var(--text); stroke: none; }
 .map .preview-drop .pip { fill: none; stroke: var(--text); stroke-width: 0.13; }
-
 .map .node:hover .pip { stroke: var(--text); stroke-width: 0.09; }
 .map .node:focus-visible { outline: none; }
-.map .node:focus-visible .pip { stroke: var(--green); stroke-width: 0.14; }
+.map .node:focus-visible .pip { stroke: var(--brand); stroke-width: 0.14; }
 
-/* ------------------------------------------------------------------ moving */
+/* ----------------------------------------------------------------- feed */
 
-.move { margin-top: 16px; }
+.feed { padding: 12px 14px 0; font-size: 12.5px; }
+.feed div { color: var(--dimmer); padding: 3px 0; }
+.feed .newest { color: var(--dim); }
+.feed .flag { color: var(--amber); }
 
-button {
-  font: inherit;
-  cursor: pointer;
-  background: var(--card-2);
-  color: var(--text);
-  border: 1px solid var(--line);
-  padding: 9px 14px;
-  text-align: left;
+/* --------------------------------------------------------- route stack */
+
+/* The stacked pickup-to-drop with a dashed connector. Every rider app has
+   this; it answers where-first and where-after in one glance. */
+.route { position: relative; padding-left: 22px; }
+.route::before {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 15px;
+  bottom: 15px;
+  width: 0;
+  border-left: 2px dotted var(--line);
 }
-button:hover:not(:disabled) { background: #29301f; border-color: #3c4436; }
-button:disabled { opacity: 0.4; cursor: not-allowed; }
-button:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
-
-button.primary {
-  display: block;
-  width: 100%;
-  background: var(--green-dim);
-  border-color: var(--green);
-  color: var(--text);
-  font-size: 16px;
-  font-weight: 600;
-  padding: 13px 15px;
+.stop { position: relative; padding: 5px 0; }
+.stop .pin {
+  position: absolute;
+  left: -22px;
+  top: 10px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
 }
-button.primary:hover { background: #357554; }
-button.primary em { display: block; font-style: normal; font-size: 12.5px; font-weight: 400; color: #b9d9c7; margin-top: 3px; }
+.stop.pickup .pin { background: var(--brand); }
+.stop.drop .pin { background: transparent; border: 2px solid var(--dim); }
+.stop.done .pin { background: var(--dimmer); }
+.stoptext b { display: block; font-size: 14.5px; font-weight: 600; line-height: 1.3; }
+.stop.done .stoptext b { color: var(--dim); text-decoration: line-through; }
+.stoptext span { display: block; font-size: 11.5px; color: var(--dimmer); margin-top: 1px; }
 
-.minor { display: flex; gap: 8px; margin-top: 9px; flex-wrap: wrap; }
-.minor button { font-size: 13px; padding: 7px 12px; }
-button.quiet { color: var(--dim); background: transparent; }
+/* --------------------------------------------------------------- offers */
 
-.hint { font-size: 12px; color: var(--dim); margin: 9px 0 0; }
-
-/* ------------------------------------------------------------------ offers */
-
-.offers { display: flex; flex-direction: column; gap: 9px; }
+.offers { display: flex; flex-direction: column; gap: 10px; }
 
 .offer {
   background: var(--card);
   border: 1px solid var(--line);
-  border-left: 3px solid var(--line);
-  padding: 12px 14px 11px;
+  border-radius: 4px;
+  padding: 11px 13px 11px;
 }
-.offer.easy { border-left-color: var(--green); }
-.offer.tight { border-left-color: var(--green-dim); }
-.offer.risky { border-left-color: var(--amber); }
-.offer.no { border-left-color: var(--red); opacity: 0.72; }
+.offer.risky { border-color: #4a3a1c; }
+.offer.no { border-color: #4a2620; }
 
-.offer-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
-.fee { font-size: 21px; font-weight: 650; color: var(--green); letter-spacing: -0.02em; }
+.offer-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 7px; }
+.tier {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 3px;
+}
+.tier.EXPRESS { background: #4a2620; color: var(--red); }
+.tier.STANDARD { background: #3d3218; color: var(--amber); }
+.tier.SCHEDULED { background: var(--card-2); color: var(--dim); }
+.countdown { font-size: 11.5px; color: var(--dimmer); font-variant-numeric: tabular-nums; }
 
-.verdict { font-size: 11.5px; font-weight: 600; letter-spacing: 0.04em; }
-.verdict.easy { color: var(--green); }
-.verdict.tight { color: var(--dim); }
-.verdict.risky { color: var(--amber); }
-.verdict.no { color: var(--red); }
+.payout { display: flex; align-items: baseline; gap: 9px; margin-bottom: 9px; }
+.payout b { font-size: 27px; font-weight: 750; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+.payout span { font-size: 12px; color: var(--dim); }
 
-.verdict em { display: block; font-style: normal; font-weight: 400; font-size: 11px; color: var(--dim); margin-top: 2px; }
-
-/* Itemised trip. Every row says which leg the minutes belong to — the first
-   pass listed the same numbers unlabelled and nobody could read them. */
-.legs { width: 100%; border-collapse: collapse; margin: 9px 0 8px; font-size: 13.5px; }
-.legs td { padding: 3px 0; vertical-align: baseline; }
-.legs td:last-child { text-align: right; color: var(--dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.legs em { font-style: normal; font-size: 11px; color: var(--dim); margin-left: 5px; }
-.legs tr.claim td:last-child { color: var(--amber); }
-.legs tr.sum td { border-top: 1px solid var(--line); padding-top: 6px; font-weight: 600; }
-.legs tr.sum td:last-child { color: var(--text); }
-.legs tr.allow td { color: var(--dim); }
-
-.slotneed { margin: 0 0 10px; font-size: 12px; color: var(--dim); }
-.slotneed.blocked { color: var(--red); }
-
-/* -------------------------------------------------------------- just now */
-
-.recent { list-style: none; margin: 0; padding: 0; font-size: 13px; }
-.recent li { padding: 5px 0; color: var(--dim); border-bottom: 1px solid var(--line); }
-.recent li:last-child { border-bottom: 0; }
-.recent li.newest { color: var(--text); }
-.recent li.flag { color: var(--amber); }
-
-.offer-actions { display: flex; align-items: center; gap: 8px; }
-.offer-actions .take { border-color: var(--green); color: var(--green); font-weight: 600; }
-.offer-actions .take:hover:not(:disabled) { background: var(--green-dim); color: var(--text); }
-.offer-actions .pass { color: var(--dim); background: transparent; }
-.expiry { margin-left: auto; font-size: 11.5px; color: var(--dim); }
-
-/* ---------------------------------------------------------------- carrying */
-
-.carrying { list-style: none; margin: 0; padding: 0; }
-.carrying li {
+.fit {
   display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 12px;
-  background: var(--card);
+  align-items: baseline;
+  gap: 8px;
+  margin: 10px 0 11px;
+  padding-top: 9px;
+  border-top: 1px solid var(--line-soft);
+  font-size: 12px;
+}
+.fitword { font-weight: 700; letter-spacing: 0.02em; }
+.fit.easy .fitword { color: var(--brand); }
+.fit.tight .fitword { color: var(--dim); }
+.fit.risky .fitword { color: var(--amber); }
+.fit.no .fitword { color: var(--red); }
+.fitwhy { color: var(--dimmer); font-size: 11.5px; }
+
+.offer-actions { display: grid; grid-template-columns: 1fr 1.6fr; gap: 8px; }
+
+button { font: inherit; cursor: pointer; border-radius: 4px; }
+button:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+.offer-actions .reject {
+  background: transparent;
   border: 1px solid var(--line);
-  border-left: 3px solid var(--green-dim);
-  margin-bottom: 6px;
+  color: var(--dim);
+  padding: 11px 0;
   font-size: 14px;
 }
-.carrying li.soon { border-left-color: var(--amber); }
-.carrying li.late { border-left-color: var(--red); }
-.carrying .when { color: var(--dim); white-space: nowrap; font-size: 13px; }
-.carrying li.soon .when { color: var(--amber); }
-.carrying li.late .when { color: var(--red); }
-
-/* ----------------------------------------------------------------- summary */
-
-.summary { padding-top: 24px; }
-.summary h2 { font-size: 13px; margin-bottom: 14px; }
-.summary table { width: 100%; border-collapse: collapse; font-size: 15px; }
-.summary td { padding: 7px 0; }
-.summary td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
-.summary tr.cost td { color: var(--dim); }
-.summary tr.total td {
-  border-top: 1px solid var(--line);
-  padding-top: 12px;
-  font-size: 24px;
-  font-weight: 650;
-  color: var(--green);
+.offer-actions .reject:hover { border-color: var(--dim); color: var(--text); }
+.offer-actions .accept {
+  background: var(--brand);
+  border: 0;
+  color: #062119;
+  font-weight: 750;
+  font-size: 15px;
+  padding: 11px 0;
 }
-.waited { font-size: 13.5px; color: var(--dim); line-height: 1.6; margin: 16px 0 20px; }
+.offer-actions .accept:hover:not(:disabled) { background: #2af0af; }
+.offer-actions .accept:disabled { background: var(--card-2); color: var(--dimmer); cursor: not-allowed; }
+
+/* ----------------------------------------------------------------- bag */
+
+h2 .slots { display: flex; gap: 3px; margin-left: 2px; }
+.slot { width: 9px; height: 12px; border-radius: 2px; border: 1px solid var(--line); display: block; }
+.slot.hot { border-color: #4a3a2a; }
+.slot.cold { border-color: #2a3d4a; }
+.slot.full { background: var(--brand); border-color: var(--brand); }
+
+.tasks { display: flex; flex-direction: column; gap: 8px; }
+.task {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--brand-deep);
+  border-radius: 4px;
+  padding: 9px 13px 10px;
+  cursor: pointer;
+}
+.task.soon { border-left-color: var(--amber); }
+.task.late { border-left-color: var(--red); }
+.task:hover { background: var(--card-2); }
+.task-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
+.step { font-size: 10.5px; font-weight: 800; letter-spacing: 0.09em; text-transform: uppercase; color: var(--dim); }
+.due { font-size: 12px; color: var(--dim); font-variant-numeric: tabular-nums; }
+.task.soon .due { color: var(--amber); }
+.task.late .due { color: var(--red); }
+
+/* ------------------------------------------------------------ action bar */
+
+.endshift { padding: 20px 14px 0; }
+.endshift button {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--dimmer);
+  font-size: 13px;
+  padding: 9px 14px;
+  width: 100%;
+}
+.endshift button:hover { color: var(--red); border-color: #4a2620; }
+
+/* Pinned like every rider app's primary action, so the next move is always
+   reachable with a thumb without scrolling. */
+.actionbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10;
+  display: flex;
+  gap: 8px;
+  padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(to top, var(--chrome) 72%, rgba(10, 12, 11, 0));
+  max-width: 460px;
+  margin: 0 auto;
+}
+.actionbar .go {
+  flex: 1;
+  background: var(--brand);
+  border: 0;
+  color: #062119;
+  padding: 11px 16px;
+  text-align: left;
+}
+.actionbar .go:hover { background: #2af0af; }
+.golabel { display: block; font-size: 15.5px; font-weight: 750; letter-spacing: -0.01em; }
+.gometa { display: block; font-size: 11.5px; font-weight: 500; opacity: 0.72; margin-top: 1px; }
+.actionbar .wait {
+  background: var(--card-2);
+  border: 1px solid var(--line);
+  color: var(--dim);
+  padding: 11px 15px;
+  font-size: 13.5px;
+}
+.actionbar .wait:hover { color: var(--text); }
+
+/* -------------------------------------------------------------- summary */
+
+.summary { padding: 28px 14px 40px; }
+.summary .label { font-size: 10.5px; letter-spacing: 0.11em; text-transform: uppercase; color: var(--dimmer); font-weight: 600; }
+.summary .amt { font-size: 46px; font-weight: 750; letter-spacing: -0.035em; color: var(--brand); line-height: 1.05; margin: 3px 0 2px; font-variant-numeric: tabular-nums; }
+.summary .paidout { font-size: 12.5px; color: var(--dim); }
+.summary table { width: 100%; border-collapse: collapse; font-size: 14px; margin: 22px 0 0; }
+.summary td { padding: 9px 0; border-bottom: 1px solid var(--line-soft); }
+.summary td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+.summary td em { font-style: normal; color: var(--dimmer); font-size: 12px; }
+.summary tr.cost td { color: var(--dim); }
+.waited { font-size: 13px; color: var(--dim); line-height: 1.55; margin: 18px 0 22px; }
 .waited b { color: var(--text); }
 .flag { color: var(--amber); display: block; margin-top: 3px; }
+.summary .go { display: block; width: 100%; background: var(--brand); border: 0; color: #062119; padding: 14px; text-align: center; }
+.summary .go:hover { background: #2af0af; }
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
-
-.busy { font-weight: 600; }
-.busy.hot { color: var(--red); }
-.busy.warm { color: var(--amber); }
-.busy.cold { color: var(--muted); }
-
-.dimmer { color: var(--muted); font-size: 12px; }

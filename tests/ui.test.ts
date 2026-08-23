@@ -3,6 +3,7 @@ import { DEFAULT_ECONOMY as E } from "../src/sim/economy.js";
 import { accept, createShift, idle, travelTo } from "../src/sim/shift.js";
 import { esc, mins, rupees, urgency } from "../src/ui/format.js";
 import { renderMap } from "../src/ui/map.js";
+import { routeStack } from "../src/ui/route.js";
 import { estimate, VERDICT_LABEL } from "../src/ui/verdict.js";
 
 describe("format", () => {
@@ -111,5 +112,24 @@ describe("renderMap", () => {
 
   it("escapes node names into the markup", () => {
     expect(renderMap(createShift(1), null)).not.toContain("<script");
+  });
+});
+
+describe("routeStack", () => {
+  it("renders both stops with a pickup and a drop pin", () => {
+    const html = routeStack("qk", "d1");
+    expect(html).toContain("stop pickup");
+    expect(html).toContain("stop drop");
+    expect(html).toContain("QuickKart Dark Store");
+    expect(html).toContain("Silver Oaks Apts");
+  });
+
+  it("strikes the pickup once it has been collected", () => {
+    expect(routeStack("qk", "d1", { done: "pickup" })).toContain("stop pickup done");
+    expect(routeStack("qk", "d1")).not.toContain("done");
+  });
+
+  it("escapes notes into the markup", () => {
+    expect(routeStack("qk", "d1", { pickupNote: "<script>" })).not.toContain("<script>");
   });
 });
