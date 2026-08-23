@@ -1,6 +1,7 @@
 import "./style.css";
 import { node } from "./sim/city.js";
 import { DEFAULT_CONFIG } from "./sim/config.js";
+import { commit } from "./sim/duty.js";
 import {
   accept,
   createShift,
@@ -9,11 +10,13 @@ import {
   idle,
   isOver,
   reject,
+  startDuty,
   travelTo,
   type ShiftState,
 } from "./sim/shift.js";
 import { esc, rupees } from "./ui/format.js";
 import { renderMap } from "./ui/map.js";
+import { locateMessage, locateRider } from "./ui/locate.js";
 import {
   actionBlock,
   bagBlock,
@@ -21,6 +24,7 @@ import {
   feedBlock,
   incentiveBlock,
   offersBlock,
+  startScreen,
   summaryScreen,
 } from "./ui/panels.js";
 
@@ -41,10 +45,32 @@ if (!app) throw new Error("#app not found");
 type SheetState = "peek" | "half" | "full";
 const SHEET_ORDER: SheetState[] = ["peek", "half", "full"];
 
+type Phase = "start" | "working" | "done";
+
 let state: ShiftState = createShift(Math.floor(Math.random() * 1e9), cfg);
-let finished = false;
+let phase: Phase = "start";
 let preview: string | null = null;
 let sheet: SheetState = "half";
+
+/** Where the rider actually is, resolved once at the start of the day. */
+let startNodeId = "qk";
+let locateNote: string | null = null;
+let locating = true;
+let chosenSlot = "";
+
+/**
+ * Ask for the rider's position the moment the app opens, exactly as a rider app
+ * does. It never blocks: denied, timed out or unsupported all fall through to
+ * the dark store and the day starts anyway.
+ */
+async function findRider(): Promise<void> {
+  const outcome = await locateRider();
+  if (outcome.kind === "located") startNodeId = outcome.nodeId;
+  locateNote = locateMessage(outcome);
+  locating = false;
+  if (phase === "start") void findRider();
+render();
+}
 
 const earnedSoFar = (): number => state.completed.reduce((s, c) => s + c.paid, 0);
 
@@ -79,10 +105,38 @@ function mapLayer(): string {
     </div>`;
 }
 
+function beginDay(): void {
+  // Rebuild from the located start rather than moving the rider there, so the
+  // day genuinely begins where they are standing.
+  state = createShift(Math.floor(Math.random() * 1e9), cfg, startNodeId);
+  if (chosenSlot) commit(state.duty, chosenSlot, state.clock, cfg);
+
+  // Skip the empty early hours to whenever the booked window opens, or to the
+  // lunch peak if nothing was booked. Nobody wants to sit through 6am.
+  const slot = cfg.slots.find((s) => s.id === chosenSlot);
+  const openAt = ((slot ? slot.fromHour : 12) - cfg.dayStartHour) * 60;
+  if (openAt > 0) idle(state, openAt);
+
+  startDuty(state);
+  phase = "working";
+  sheet = "half";
+  void findRider();
+render();
+}
+
 function render(): void {
   if (!app) return;
 
-  if (finished) {
+  if (phase === "start") {
+    app.innerHTML = `
+      <div class="statusbar">
+        <span class="brand">NOW <em>partner</em></span>
+      </div>
+      ${startScreen(cfg, locateNote, locating)}`;
+    return;
+  }
+
+  if (phase === "done") {
     app.innerHTML = `<div class="statusbar"><span class="brand">NOW <em>partner</em></span></div>${summaryScreen(state)}`;
     return;
   }
@@ -110,7 +164,7 @@ function render(): void {
 }
 
 function finishIfOver(): void {
-  if (isOver(state)) finished = true;
+  if (isOver(state)) phase = "done";
 }
 
 /* --------------------------------------------------------------- events */
@@ -120,16 +174,27 @@ app.addEventListener("click", (event) => {
   if (!(target instanceof Element)) return;
 
   const hit = target.closest<HTMLElement>(
-    "[data-accept],[data-reject],[data-go],[data-wait],[data-end],[data-restart],[data-sheet]",
+    "[data-accept],[data-reject],[data-go],[data-wait],[data-end],[data-restart],[data-sheet],[data-begin],[data-slot]",
   );
   if (!hit) return;
 
   const d = hit.dataset;
 
+  if (d["slot"] !== undefined) {
+    chosenSlot = d["slot"];
+    return; // the radio handles its own visual state
+  }
+
+  if (d["begin"]) {
+    beginDay();
+    return;
+  }
+
   if (d["sheet"]) {
     const index = SHEET_ORDER.indexOf(sheet);
     sheet = SHEET_ORDER[(index + 1) % SHEET_ORDER.length] ?? "half";
-    render();
+    void findRider();
+render();
     return;
   }
 
@@ -140,19 +205,20 @@ app.addEventListener("click", (event) => {
     // Riding is the moment the map matters, so drop the sheet out of the way.
     sheet = "peek";
   } else if (d["wait"]) idle(state, Number(d["wait"]));
-  else if (d["end"]) finished = true;
+  else if (d["end"]) phase = "done";
   else if (d["restart"]) {
-    state = createShift(Math.floor(Math.random() * 1e9), cfg);
-    finished = false;
+    phase = "start";
+    chosenSlot = "";
     preview = null;
-    sheet = "half";
-    render();
+    void findRider();
+render();
     return;
   } else return;
 
   preview = null;
   finishIfOver();
-  render();
+  void findRider();
+render();
 });
 
 /* Dragging the sheet. Delegated so it survives a re-render. */
@@ -182,7 +248,8 @@ app.addEventListener("pointerup", (event) => {
   const resolved = SHEET_ORDER[clamped];
   if (resolved && resolved !== sheet) {
     sheet = resolved;
-    render();
+    void findRider();
+render();
   }
 });
 
@@ -194,7 +261,8 @@ app.addEventListener("pointerover", (event) => {
   const id = target.closest<HTMLElement>("[data-preview]")?.dataset["preview"] ?? null;
   if (id !== preview) {
     preview = id;
-    render();
+    void findRider();
+render();
   }
 });
 
@@ -209,7 +277,9 @@ app.addEventListener("keydown", (event) => {
   travelTo(state, go);
   sheet = "peek";
   finishIfOver();
-  render();
+  void findRider();
+render();
 });
 
+void findRider();
 render();

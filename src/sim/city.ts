@@ -25,7 +25,8 @@ const KM_PER_DEG_LON = 97.5;
 const ORIGIN_LON = 77.028;
 const NORTH_LAT = 28.500;
 
-function project(lat: number, lon: number): { x: number; y: number } {
+/** Longitude/latitude to the zone's local kilometre grid. */
+export function project(lat: number, lon: number): { x: number; y: number } {
   return {
     x: (lon - ORIGIN_LON) * KM_PER_DEG_LON,
     // Screen y grows downward, so north has to flip.
@@ -134,6 +135,40 @@ export const BOUNDS = (() => {
     maxY: Math.max(...ys),
   };
 })();
+
+/**
+ * The node closest to a real-world position, and how far off it is.
+ *
+ * The play area is one zone of Gurgaon, so a player anywhere else lands far
+ * outside it. Rather than refuse, we snap them to the nearest node and say how
+ * far away they really are — the game is still playable from Bengaluru, it just
+ * admits you are not actually in Sushant Lok.
+ */
+export function nearestNode(lat: number, lon: number): { node: CityNode; km: number } {
+  const here = project(lat, lon);
+  let best = NODES[0]!;
+  let bestKm = Infinity;
+
+  for (const n of NODES) {
+    const km = Math.hypot(n.x - here.x, n.y - here.y);
+    if (km < bestKm) {
+      bestKm = km;
+      best = n;
+    }
+  }
+  return { node: best, km: bestKm };
+}
+
+/** Whether a real-world position falls inside the drawn zone. */
+export function insideZone(lat: number, lon: number): boolean {
+  const p = project(lat, lon);
+  return (
+    p.x >= BOUNDS.minX - 1 &&
+    p.x <= BOUNDS.maxX + 1 &&
+    p.y >= BOUNDS.minY - 1 &&
+    p.y <= BOUNDS.maxY + 1
+  );
+}
 
 const BY_ID = new Map<string, CityNode>(NODES.map((n) => [n.id, n]));
 

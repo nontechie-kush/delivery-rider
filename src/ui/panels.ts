@@ -250,3 +250,72 @@ export function summaryScreen(state: ShiftState): string {
       <button class="go" data-restart="1"><span class="golabel">Go on duty again</span></button>
     </div>`;
 }
+
+/* ------------------------------------------------------------ going on duty */
+
+/**
+ * The screen before the day starts. Real riders open the app, see what the
+ * platform is offering, decide whether to commit to a window, and only then go
+ * on duty — so the game asks the same three questions in the same order.
+ */
+export function startScreen(
+  cfg: GameConfig,
+  located: string | null,
+  locating: boolean,
+): string {
+  const slots = cfg.slots
+    .map(
+      (s) => `
+      <label class="slotpick">
+        <input type="radio" name="slot" value="${esc(s.id)}" data-slot="${esc(s.id)}" />
+        <span class="slotbody">
+          <b>${esc(s.label)}</b>
+          <span class="slothours">${s.fromHour}:00–${s.toHour}:00</span>
+          <span class="slotterms">Stay online the whole window, reject at most
+            ${s.rejectionsAllowed}. Miss either and it pays nothing.</span>
+        </span>
+        <span class="slotpay">${rupees(s.guarantee)}</span>
+      </label>`,
+    )
+    .join("");
+
+  return `
+    <div class="start">
+      <span class="label">Good morning</span>
+      <h1>Ready to go on duty?</h1>
+
+      <div class="locrow ${locating ? "busy" : ""}">
+        <span class="locpin" aria-hidden="true"></span>
+        <span class="loctext">${
+          locating
+            ? "Finding you…"
+            : located
+              ? esc(located)
+              : "We'll start you wherever you are."
+        }</span>
+      </div>
+
+      <h2>Book a window <span class="count">optional</span></h2>
+      <p class="slotintro">
+        Hit every term and you can't earn less than the guarantee. Break one and
+        it's worth nothing at all.
+      </p>
+      <div class="slotpicks">
+        ${slots}
+        <label class="slotpick">
+          <input type="radio" name="slot" value="" data-slot="" checked />
+          <span class="slotbody">
+            <b>No commitment</b>
+            <span class="slotterms">Work when you like. Reject what you like.
+              No floor under your earnings.</span>
+          </span>
+          <span class="slotpay free">—</span>
+        </label>
+      </div>
+
+      <button class="go" data-begin="1">
+        <span class="golabel">Go on duty</span>
+        <span class="gometa">Orders only arrive while you're online</span>
+      </button>
+    </div>`;
+}

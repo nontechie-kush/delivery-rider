@@ -88,13 +88,17 @@ export interface ShiftSummary {
   unitsRidden: number;
 }
 
-export function createShift(seed: number, cfg: GameConfig = DEFAULT_CONFIG): ShiftState {
+export function createShift(
+  seed: number,
+  cfg: GameConfig = DEFAULT_CONFIG,
+  startNodeId: string = START_NODE_ID,
+): ShiftState {
   const rng = makeRng(seed);
   const state: ShiftState = {
     cfg,
     rng,
     clock: 0,
-    locationId: START_NODE_ID,
+    locationId: node(startNodeId).id,
     bag: makeBag(),
     carried: [],
     offers: [],
