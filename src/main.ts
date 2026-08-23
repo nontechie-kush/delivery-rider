@@ -125,8 +125,27 @@ function beginDay(): void {
   render();
 }
 
+/**
+ * Repaint only the map.
+ *
+ * Hovering an offer draws its route, and rebuilding the whole app for that
+ * threw away the sheet's scroll position — so reaching for Accept scrolled the
+ * button out from under the cursor. Nothing but the map depends on `preview`,
+ * so nothing but the map needs redrawing.
+ */
+function renderPreview(): void {
+  const layer = app?.querySelector(".maplayer");
+  const svg = layer?.querySelector("svg");
+  if (!layer || !svg) return;
+  svg.outerHTML = renderMap(state, preview);
+}
+
 function render(): void {
   if (!app) return;
+
+  // A full repaint replaces the scroll container, which would otherwise dump
+  // the player back at the top of the sheet after every accept or ride.
+  const scrolled = app.querySelector(".sheet-scroll")?.scrollTop ?? 0;
 
   if (phase === "start") {
     app.innerHTML = `
@@ -163,6 +182,9 @@ function render(): void {
       </div>
       ${actionBlock(state)}
     </div>`;
+
+  const scroller = app.querySelector(".sheet-scroll");
+  if (scroller && scrolled > 0) scroller.scrollTop = scrolled;
 }
 
 function finishIfOver(): void {
@@ -259,7 +281,7 @@ app.addEventListener("pointerover", (event) => {
   const id = target.closest<HTMLElement>("[data-preview]")?.dataset["preview"] ?? null;
   if (id !== preview) {
     preview = id;
-    render();
+    renderPreview();
   }
 });
 

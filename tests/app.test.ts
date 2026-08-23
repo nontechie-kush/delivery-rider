@@ -108,6 +108,40 @@ describe("the buttons respond", () => {
     expect(app.querySelector("[data-begin]")).not.toBeNull();
   });
 
+  /**
+   * Hovering an offer used to trigger a full repaint, which replaced the scroll
+   * container and dumped the player back at the top of the sheet — so reaching
+   * for Accept scrolled the button out from under the cursor. Only the map
+   * depends on the hover, so only the map may be redrawn.
+   */
+  it("does not rebuild the sheet when an offer is hovered", async () => {
+    const app = await mountApp();
+    click(app.querySelector("[data-begin]"));
+
+    const scroller = app.querySelector(".sheet-scroll");
+    const offer = app.querySelector("[data-preview]");
+    if (!offer || !scroller) return; // no offers in the queue on this seed
+
+    offer.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+
+    // Same node, not a replacement — identity is what scroll position rides on.
+    expect(app.querySelector(".sheet-scroll")).toBe(scroller);
+  });
+
+  it("keeps the reader's place in the sheet across a repaint", async () => {
+    const app = await mountApp();
+    click(app.querySelector("[data-begin]"));
+
+    const scroller = app.querySelector(".sheet-scroll");
+    if (!scroller) throw new Error("no sheet to scroll");
+    scroller.scrollTop = 120;
+
+    // Any action that repaints the whole app.
+    click(app.querySelector("[data-wait]"));
+
+    expect(app.querySelector(".sheet-scroll")?.scrollTop).toBe(120);
+  });
+
   /** A render loop would hang the test rather than fail it, so bound it. */
   it("does not re-enter render on a repaint", async () => {
     const app = await mountApp();
