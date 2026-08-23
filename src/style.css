@@ -1,0 +1,94 @@
+/*
+ * Phase 0 is a test of one question: is choosing orders tense?
+ * Deliberately plain. Every hour spent on looks here is an hour spent defending a
+ * loop that has not been tested yet.
+ */
+:root {
+  --bg: #12140f;
+  --panel: #1b1e18;
+  --line: #2f342b;
+  --text: #e6e9df;
+  --dim: #8b9384;
+  --green: #6ede9e;
+  --amber: #e5b45c;
+  --red: #ef7e6d;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 12px;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+#app { max-width: 780px; margin: 0 auto; }
+
+h1 { font-size: 15px; margin: 0 0 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--dim); }
+h2 { font-size: 12px; margin: 0 0 6px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--dim); font-weight: 600; }
+
+.hud {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  margin-bottom: 12px;
+}
+.hud div { background: var(--panel); padding: 7px 9px; }
+.hud b { display: block; font-size: 17px; font-weight: 600; }
+.hud span { font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.08em; }
+
+.panel { border: 1px solid var(--line); background: var(--panel); padding: 10px; margin-bottom: 12px; }
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--line);
+}
+.row:last-child { border-bottom: 0; }
+.row .grow { flex: 1 1 220px; min-width: 0; }
+
+button {
+  font: inherit;
+  font-size: 12px;
+  padding: 4px 10px;
+  background: #262b21;
+  color: var(--text);
+  border: 1px solid var(--line);
+  cursor: pointer;
+}
+button:hover:not(:disabled) { background: #323828; }
+button:disabled { opacity: 0.35; cursor: not-allowed; }
+button.go { border-color: var(--green); color: var(--green); }
+button.stop { border-color: var(--line); color: var(--dim); }
+button:focus-visible { outline: 2px solid var(--green); outline-offset: 1px; }
+
+.tag { font-size: 10px; padding: 1px 5px; border: 1px solid var(--line); letter-spacing: 0.06em; }
+.EXPRESS { color: var(--red); border-color: var(--red); }
+.STANDARD { color: var(--amber); border-color: var(--amber); }
+.SCHEDULED { color: var(--dim); }
+
+.dim { color: var(--dim); }
+.green { color: var(--green); }
+.amber { color: var(--amber); }
+.red { color: var(--red); }
+
+.slots { display: flex; gap: 5px; flex-wrap: wrap; }
+.slot { border: 1px solid var(--line); padding: 3px 8px; font-size: 11px; color: var(--dim); }
+.slot.full { border-color: var(--green); color: var(--green); }
+
+#log { max-height: 150px; overflow-y: auto; font-size: 11px; color: var(--dim); }
+#log div { padding: 1px 0; }
+
+.end { border-color: var(--green); }
+.end table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.end td { padding: 3px 0; }
+.end td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+.end tr.total td { border-top: 1px solid var(--line); padding-top: 7px; font-size: 16px; color: var(--green); }

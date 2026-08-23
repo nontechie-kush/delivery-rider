@@ -1,0 +1,56 @@
+{
+  "shifts": 1000,
+  "seed": 42,
+  "checksum": "e6857d7c",
+  "selective": {
+    "shifts": 1000,
+    "delivered": 23551,
+    "onTime": 23352,
+    "late": 199,
+    "fees": 781945,
+    "milestones": 501750,
+    "net": 1163695,
+    "waiting": 23247.18861539868,
+    "waitingHidden": 3370.8686630872917,
+    "undelivered": 1462,
+    "hits": [
+      1000,
+      981,
+      14
+    ]
+  },
+  "greedy": {
+    "shifts": 1000,
+    "delivered": 30395,
+    "onTime": 11028,
+    "late": 19367,
+    "fees": 819215,
+    "milestones": 71500,
+    "net": 770715,
+    "waiting": 9078.839024058367,
+    "waitingHidden": 1417.728458546888,
+    "undelivered": 4010,
+    "hits": [
+      423,
+      23,
+      0
+    ]
+  },
+  "solo": {
+    "shifts": 1000,
+    "delivered": 20376,
+    "onTime": 19268,
+    "late": 1108,
+    "fees": 781419,
+    "milestones": 311350,
+    "net": 972769,
+    "waiting": 8673.6607032278,
+    "waitingHidden": 906.9232994964574,
+    "undelivered": 507,
+    "hits": [
+      1000,
+      461,
+      0
+    ]
+  }
+}
