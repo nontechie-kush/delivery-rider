@@ -1,5 +1,5 @@
 import "./style.css";
-import { NODES, node, travelMinutes } from "./sim/city.js";
+import { node, travelMinutes } from "./sim/city.js";
 import { DEFAULT_ECONOMY, nextMilestone } from "./sim/economy.js";
 import {
   accept,
@@ -13,7 +13,9 @@ import {
   travelTo,
   type ShiftState,
 } from "./sim/shift.js";
-import type { Order } from "./sim/types.js";
+import { esc, mins, rupees, urgency } from "./ui/format.js";
+import { renderMap } from "./ui/map.js";
+import { estimate, VERDICT_LABEL } from "./ui/verdict.js";
 
 const cfg = DEFAULT_ECONOMY;
 const app = document.querySelector<HTMLDivElement>("#app");
@@ -21,175 +23,241 @@ if (!app) throw new Error("#app not found");
 
 let state: ShiftState = createShift(Math.floor(Math.random() * 1e9), cfg);
 let finished = false;
+let preview: string | null = null;
 
-const rupees = (n: number) => `₹${Math.round(n).toLocaleString("en-IN")}`;
-const mins = (n: number) => `${Math.round(n)}m`;
-const esc = (s: string) => s.replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" })[c] ?? c);
+const onTimeCount = (): number => state.completed.filter((c) => !c.late).length;
+const earned = (): number => state.completed.reduce((s, c) => s + c.paid, 0);
 
-/** Minutes left before an accepted order goes late. */
-function slack(order: Order): number {
-  return order.dueAt - state.clock;
-}
+/* ---------------------------------------------------------------- top bar */
 
-function urgencyClass(minutesLeft: number): string {
-  if (minutesLeft < 0) return "red";
-  if (minutesLeft < 12) return "amber";
-  return "green";
-}
-
-function hud(): string {
-  const onTime = state.completed.filter((c) => !c.late).length;
-  const next = nextMilestone(onTime, cfg);
-  const earned = state.completed.reduce((s, c) => s + c.paid, 0);
-  const left = cfg.shiftMinutes - state.clock;
+function topBar(): string {
+  const left = Math.max(0, cfg.shiftMinutes - state.clock);
+  const elapsed = (state.clock / cfg.shiftMinutes) * 100;
 
   return `
-    <div class="hud">
-      <div><b>${fmt(state.clock)}</b><span>${mins(Math.max(0, left))} left</span></div>
-      <div><b>${onTime}</b><span>on time${state.completed.length > onTime ? ` · ${state.completed.length - onTime} late` : ""}</span></div>
-      <div><b class="${next && next.short <= 3 ? "amber" : ""}">${next ? `+${next.short}` : "—"}</b><span>${next ? `for ${rupees(next.bonus)}` : "all cleared"}</span></div>
-      <div><b>${rupees(earned)}</b><span>fees so far</span></div>
+    <header class="top">
+      <div class="clock">
+        <b>${fmt(state.clock)}</b>
+        <span>${mins(left)} of shift left</span>
+      </div>
+      <div class="cash">
+        <b>${rupees(earned())}</b>
+        <span>earned so far</span>
+      </div>
+      <div class="daybar" aria-hidden="true"><i style="width:${Math.min(100, elapsed)}%"></i></div>
+    </header>`;
+}
+
+/* ------------------------------------------------------------- milestone */
+
+function milestoneBar(): string {
+  const done = onTimeCount();
+  const next = nextMilestone(done, cfg);
+
+  if (!next) {
+    return `<div class="goal done"><b>Every bonus cleared.</b><span>${done} on time</span></div>`;
+  }
+
+  const previous = cfg.milestones.filter((m) => m.orders <= done).pop()?.orders ?? 0;
+  const span = next.orders - previous;
+  const pct = ((done - previous) / span) * 100;
+  const close = next.short <= 3;
+
+  return `
+    <div class="goal ${close ? "close" : ""}">
+      <div class="goal-head">
+        <b>${next.short} more on time</b>
+        <span>unlocks ${rupees(next.bonus)} bonus</span>
+      </div>
+      <div class="track" role="img" aria-label="${done} of ${next.orders} on-time deliveries">
+        <i style="width:${Math.max(2, pct)}%"></i>
+      </div>
+      <div class="goal-foot">
+        <span>${done} delivered on time</span>
+        <span>${next.orders}</span>
+      </div>
     </div>`;
 }
 
-function bagPanel(): string {
-  const slots = state.bag
-    .map((s) => `<span class="slot ${s.orderId ? "full" : ""}">${s.kind}${s.orderId ? ` ${s.orderId}` : ""}</span>`)
-    .join("");
-  return `<div class="panel"><h2>Bag</h2><div class="slots">${slots}</div></div>`;
+/* ----------------------------------------------------------------- offers */
+
+function offerCard(orderId: string): string {
+  const order = state.offers.find((o) => o.id === orderId);
+  if (!order) return "";
+
+  const est = estimate(state, order, cfg);
+  const room = canAccept(state, order.id);
+  const expiresIn = order.expiresAt - state.clock;
+  const ride = travelMinutes(state.locationId, order.pickupId);
+
+  const tierWord =
+    order.tier === "EXPRESS" ? "Express" : order.tier === "STANDARD" ? "Standard" : "Scheduled";
+
+  return `
+    <article class="offer ${est.verdict}" data-preview="${esc(order.id)}">
+      <div class="offer-top">
+        <span class="fee">${rupees(order.fee)}</span>
+        <span class="verdict ${est.verdict}">${VERDICT_LABEL[est.verdict]}</span>
+      </div>
+
+      <p class="trip">
+        Pick up at <b>${esc(node(order.pickupId).name)}</b><br>
+        Take it to <b>${esc(node(order.dropId).name)}</b>
+      </p>
+
+      <p class="detail">
+        ${tierWord} · ${mins(cfg.tiers[order.tier].window)} to deliver ·
+        ${mins(ride)} ride · about ${mins(order.shownPrep)} wait ·
+        ${order.temp.toLowerCase()}
+      </p>
+
+      <div class="offer-actions">
+        <button class="take" data-accept="${esc(order.id)}" ${room ? "" : "disabled"}>
+          ${room ? "Take it" : "Bag is full"}
+        </button>
+        <button class="pass" data-reject="${esc(order.id)}">Pass</button>
+        <span class="expiry">gone in ${mins(expiresIn)}</span>
+      </div>
+    </article>`;
 }
 
-function carriedPanel(): string {
-  if (state.carried.length === 0) {
-    return `<div class="panel"><h2>Carrying</h2><div class="dim">Nothing. Take something.</div></div>`;
+function offersSection(): string {
+  if (state.offers.length === 0) {
+    return `
+      <section>
+        <h2>New orders</h2>
+        <p class="empty">Nothing on offer. Wait a while, or get moving.</p>
+      </section>`;
   }
 
-  const rows = state.carried
+  const cards = [...state.offers]
+    .sort((a, b) => a.expiresAt - b.expiresAt)
+    .map((o) => offerCard(o.id))
+    .join("");
+
+  return `<section><h2>New orders</h2><div class="offers">${cards}</div></section>`;
+}
+
+/* ---------------------------------------------------------------- carrying */
+
+function carryingSection(): string {
+  const total = state.bag.length;
+  const free = state.bag.filter((s) => s.orderId === null).length;
+
+  if (state.carried.length === 0) {
+    return `
+      <section>
+        <h2>In your bag <span class="cap">${total - free} of ${total}</span></h2>
+        <p class="empty">Empty. Take something.</p>
+      </section>`;
+  }
+
+  const rows = [...state.carried]
+    .sort((a, b) => a.order.dueAt - b.order.dueAt)
     .map((c) => {
       const target = c.leg === "TO_PICKUP" ? c.order.pickupId : c.order.dropId;
-      const left = slack(c.order);
-      const verb = c.leg === "TO_PICKUP" ? "collect at" : "drop at";
+      const left = c.order.dueAt - state.clock;
+      const state_ = urgency(left);
       return `
-        <div class="row">
-          <span class="tag ${c.order.tier}">${c.order.tier}</span>
-          <span class="grow">${c.order.id} · ${verb} <b>${esc(node(target).name)}</b></span>
-          <span class="${urgencyClass(left)}">${left < 0 ? `LATE ${mins(-left)}` : mins(left)}</span>
-          <span class="dim">${rupees(c.order.fee)}</span>
-        </div>`;
+        <li class="${state_}">
+          <span class="what">${c.leg === "TO_PICKUP" ? "Collect from" : "Deliver to"}
+            <b>${esc(node(target).name)}</b></span>
+          <span class="when">${left < 0 ? `${mins(-left)} late` : `${mins(left)} left`}</span>
+        </li>`;
     })
     .join("");
 
-  return `<div class="panel"><h2>Carrying (${state.carried.length})</h2>${rows}</div>`;
+  return `
+    <section>
+      <h2>In your bag <span class="cap">${total - free} of ${total}</span></h2>
+      <ul class="carrying">${rows}</ul>
+    </section>`;
 }
 
-function offersPanel(): string {
-  if (state.offers.length === 0) {
-    return `<div class="panel"><h2>Offers</h2><div class="dim">Queue is empty. Wait, or ride on.</div></div>`;
-  }
+/* ------------------------------------------------------------------ moving */
 
-  const rows = [...state.offers]
-    .sort((a, b) => a.expiresAt - b.expiresAt)
-    .map((o) => {
-      const room = canAccept(state, o.id);
-      const expiresIn = o.expiresAt - state.clock;
-      const ride = travelMinutes(state.locationId, o.pickupId);
-      return `
-        <div class="row">
-          <span class="tag ${o.tier}">${o.tier}</span>
-          <span class="grow">
-            <b>${rupees(o.fee)}</b> ${o.temp.toLowerCase()} ·
-            ${esc(node(o.pickupId).name)} → ${esc(node(o.dropId).name)}<br>
-            <span class="dim">${mins(ride)} ride · ${mins(o.shownPrep)} prep · ${mins(cfg.tiers[o.tier].window)} window</span>
-          </span>
-          <span class="dim">gone in ${mins(expiresIn)}</span>
-          <button class="go" data-accept="${o.id}" ${room ? "" : "disabled"}>${room ? "Take" : "No room"}</button>
-          <button class="stop" data-reject="${o.id}">Pass</button>
-        </div>`;
-    })
-    .join("");
-
-  return `<div class="panel"><h2>Offers</h2>${rows}</div>`;
-}
-
-function movePanel(): string {
-  // Stops that actually serve something you are carrying, closest first.
-  const useful = new Map<string, number>();
+function moveSection(): string {
+  const stops = new Map<string, number>();
   for (const c of state.carried) {
     const id = c.leg === "TO_PICKUP" ? c.order.pickupId : c.order.dropId;
-    useful.set(id, Math.min(useful.get(id) ?? Infinity, slack(c.order)));
+    stops.set(id, Math.min(stops.get(id) ?? Infinity, c.order.dueAt - state.clock));
   }
 
-  const buttons = [...useful.entries()]
-    .sort((a, b) => travelMinutes(state.locationId, a[0]) - travelMinutes(state.locationId, b[0]))
-    .map(([id, soonest]) => {
-      const ride = travelMinutes(state.locationId, id);
+  const next = [...stops.entries()]
+    .sort((a, b) => a[1] - b[1])
+    .slice(0, 1)
+    .map(([id, slack]) => {
       const serves = state.carried.filter(
         (c) => (c.leg === "TO_PICKUP" ? c.order.pickupId : c.order.dropId) === id,
       ).length;
-      return `<button class="go" data-go="${id}">${esc(node(id).name)} · ${mins(ride)}${serves > 1 ? ` · ${serves} orders` : ""} <span class="${urgencyClass(soonest)}">●</span></button>`;
+      return `
+        <button class="primary" data-go="${esc(id)}">
+          Ride to ${esc(node(id).name)}
+          <em>${mins(travelMinutes(state.locationId, id))}${serves > 1 ? ` · ${serves} orders here` : ""} · ${
+            slack < 0 ? "already late" : `${mins(slack)} to spare`
+          }</em>
+        </button>`;
     })
     .join("");
 
-  const others = NODES.filter((n) => n.id !== state.locationId && !useful.has(n.id))
-    .map((n) => `<button data-go="${n.id}">${esc(n.name)} · ${mins(travelMinutes(state.locationId, n.id))}</button>`)
-    .join("");
-
   return `
-    <div class="panel">
-      <h2>At ${esc(node(state.locationId).name)} — ride to</h2>
-      <div class="row">${buttons || '<span class="dim">Nowhere to be.</span>'}</div>
-      <div class="row">
-        <button data-wait="10">Wait 10m</button>
-        <button data-wait="25">Wait 25m</button>
-        <button data-end="1" class="stop">End shift</button>
+    <section class="move">
+      <h2>You're at ${esc(node(state.locationId).name)}</h2>
+      ${next || '<p class="empty">Nowhere you need to be.</p>'}
+      <div class="minor">
+        <button data-wait="10">Wait 10 min</button>
+        <button data-wait="25">Wait 25 min</button>
+        <button data-end="1" class="quiet">End shift early</button>
       </div>
-      <details><summary class="dim">Ride somewhere else</summary><div class="row">${others}</div></details>
-    </div>`;
+      <p class="hint">Tap any dot on the map to ride there.</p>
+    </section>`;
 }
 
-function logPanel(): string {
-  const lines = state.log.slice(-40).reverse().map((l) => `<div>${esc(l)}</div>`).join("");
-  return `<div class="panel"><h2>Log</h2><div id="log">${lines}</div></div>`;
-}
+/* ----------------------------------------------------------------- summary */
 
-function summaryPanel(): string {
-  const sum = endShift(state);
-  const hidden = sum.minutesWaitingHidden;
+function summary(): string {
+  const s = endShift(state);
+  const hidden = s.minutesWaitingHidden;
 
   return `
-    <div class="panel end">
+    <div class="summary">
       <h2>Shift over</h2>
       <table>
-        <tr><td>${sum.ordersDelivered} delivered, ${sum.ordersOnTime} on time</td><td>${rupees(sum.fees)}</td></tr>
-        <tr><td>Milestone bonus <span class="dim">(on-time only)</span></td><td>${rupees(sum.milestones)}</td></tr>
-        <tr><td class="dim">Fuel, data, wear</td><td class="dim">−${rupees(sum.expenses)}</td></tr>
-        <tr class="total"><td>Take-home</td><td>${rupees(sum.net)}</td></tr>
+        <tr><td>${s.ordersDelivered} delivered${s.ordersLate > 0 ? `, ${s.ordersLate} late` : ""}</td>
+            <td>${rupees(s.fees)}</td></tr>
+        <tr><td>Bonus for ${s.ordersOnTime} on time</td>
+            <td>${s.milestones > 0 ? rupees(s.milestones) : "—"}</td></tr>
+        <tr class="cost"><td>Fuel, data, wear</td><td>−${rupees(s.expenses)}</td></tr>
+        <tr class="total"><td>Take home</td><td>${rupees(s.net)}</td></tr>
       </table>
-      <div class="row dim">
-        Stood waiting ${mins(sum.minutesWaiting)} at pickups.
-        ${hidden > 1 ? `<span class="amber">${mins(hidden)} of it the app never showed you.</span>` : ""}
-        ${sum.undelivered > 0 ? `<span class="red">${sum.undelivered} still in your bag.</span>` : ""}
-      </div>
-      <div class="row"><button class="go" data-restart="1">Another shift</button></div>
+
+      <p class="waited">
+        You spent <b>${mins(s.minutesWaiting)}</b> standing at pickups.
+        ${hidden > 1 ? `<span class="flag">${mins(hidden)} of that the app never showed you.</span>` : ""}
+        ${s.undelivered > 0 ? `<span class="flag">${s.undelivered} order(s) never made it out of your bag.</span>` : ""}
+      </p>
+
+      <button class="primary" data-restart="1">Start another shift</button>
     </div>`;
 }
+
+/* ------------------------------------------------------------------ render */
 
 function render(): void {
   if (!app) return;
 
   if (finished) {
-    app.innerHTML = `<h1>Shift — prototype</h1>${summaryPanel()}${logPanel()}`;
+    app.innerHTML = summary();
     return;
   }
 
   app.innerHTML = [
-    "<h1>Shift — prototype</h1>",
-    hud(),
-    offersPanel(),
-    carriedPanel(),
-    bagPanel(),
-    movePanel(),
-    logPanel(),
+    topBar(),
+    milestoneBar(),
+    `<div class="mapwrap">${renderMap(state, preview)}</div>`,
+    moveSection(),
+    offersSection(),
+    carryingSection(),
   ].join("");
 }
 
@@ -197,25 +265,58 @@ function finishIfOver(): void {
   if (isOver(state)) finished = true;
 }
 
+/* ------------------------------------------------------------------ events */
+
 app.addEventListener("click", (event) => {
   const target = event.target;
-  if (!(target instanceof HTMLElement)) return;
-  const button = target.closest("button");
-  if (!button) return;
+  if (!(target instanceof Element)) return;
 
-  const { accept: take, reject: pass, go, wait, end, restart } = button.dataset;
+  const hit = target.closest<HTMLElement>("[data-accept],[data-reject],[data-go],[data-wait],[data-end],[data-restart]");
+  if (!hit) return;
 
-  if (take) accept(state, take);
-  else if (pass) reject(state, pass);
-  else if (go) travelTo(state, go);
-  else if (wait) idle(state, Number(wait));
-  else if (end) finished = true;
-  else if (restart) {
+  const d = hit.dataset;
+
+  if (d["accept"]) accept(state, d["accept"]);
+  else if (d["reject"]) reject(state, d["reject"]);
+  else if (d["go"]) travelTo(state, d["go"]);
+  else if (d["wait"]) idle(state, Number(d["wait"]));
+  else if (d["end"]) finished = true;
+  else if (d["restart"]) {
     state = createShift(Math.floor(Math.random() * 1e9), cfg);
     finished = false;
+    preview = null;
+    render();
+    return;
   } else return;
 
-  if (!restart) finishIfOver();
+  preview = null;
+  finishIfOver();
+  render();
+});
+
+// Hovering an offer draws its route on the map, so "does this fit my trip?" is
+// answered by looking rather than by arithmetic.
+app.addEventListener("pointerover", (event) => {
+  const target = event.target;
+  if (!(target instanceof Element)) return;
+  const card = target.closest<HTMLElement>("[data-preview]");
+  const id = card?.dataset["preview"] ?? null;
+  if (id !== preview) {
+    preview = id;
+    render();
+  }
+});
+
+// Keyboard equivalent of the map's tappable dots.
+app.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  const target = event.target;
+  if (!(target instanceof Element)) return;
+  const go = target.closest<HTMLElement>("[data-go]")?.dataset["go"];
+  if (!go) return;
+  event.preventDefault();
+  travelTo(state, go);
+  finishIfOver();
   render();
 });
 

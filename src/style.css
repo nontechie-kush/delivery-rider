@@ -1,94 +1,253 @@
 /*
- * Phase 0 is a test of one question: is choosing orders tense?
- * Deliberately plain. Every hour spent on looks here is an hour spent defending a
- * loop that has not been tested yet.
+ * Phase 0 UI. Still not "art" — but it has to be legible, because an unreadable
+ * prototype tests the player's patience rather than the decision.
+ *
+ * Three rules doing most of the work:
+ *   1. One accent (green) means money and safety. Amber means hurry. Red means late.
+ *   2. Numbers the player would otherwise have to add up are shown as a verdict.
+ *   3. The map answers "do these share a route?" so the text never has to.
  */
 :root {
-  --bg: #12140f;
-  --panel: #1b1e18;
-  --line: #2f342b;
-  --text: #e6e9df;
-  --dim: #8b9384;
-  --green: #6ede9e;
-  --amber: #e5b45c;
-  --red: #ef7e6d;
+  --bg: #10130f;
+  --card: #191d17;
+  --card-2: #20251d;
+  --line: #2c322a;
+  --text: #e8ebe3;
+  --dim: #929a8c;
+  --green: #5fd497;
+  --green-dim: #2a5f45;
+  --amber: #e0ab52;
+  --red: #ef7a67;
   color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
 
+html, body { margin: 0; background: var(--bg); }
+
 body {
-  margin: 0;
-  padding: 12px;
-  background: var(--bg);
   color: var(--text);
-  font: 14px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  padding: 0 14px 40px;
+  -webkit-font-smoothing: antialiased;
 }
 
-#app { max-width: 780px; margin: 0 auto; }
+#app { max-width: 560px; margin: 0 auto; }
 
-h1 { font-size: 15px; margin: 0 0 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--dim); }
-h2 { font-size: 12px; margin: 0 0 6px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--dim); font-weight: 600; }
-
-.hud {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
-  gap: 1px;
-  background: var(--line);
-  border: 1px solid var(--line);
-  margin-bottom: 12px;
-}
-.hud div { background: var(--panel); padding: 7px 9px; }
-.hud b { display: block; font-size: 17px; font-weight: 600; }
-.hud span { font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.08em; }
-
-.panel { border: 1px solid var(--line); background: var(--panel); padding: 10px; margin-bottom: 12px; }
-
-.row {
+h2 {
+  font-size: 11px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--dim);
+  font-weight: 600;
+  margin: 22px 0 8px;
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-  padding: 7px 0;
-  border-bottom: 1px solid var(--line);
+  justify-content: space-between;
+  align-items: baseline;
 }
-.row:last-child { border-bottom: 0; }
-.row .grow { flex: 1 1 220px; min-width: 0; }
+h2 .cap { letter-spacing: 0; text-transform: none; font-weight: 400; }
+
+.empty { color: var(--dim); font-size: 14px; margin: 0; }
+
+/* ------------------------------------------------------------------ top bar */
+
+.top {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 16px;
+  padding: 16px 0 10px;
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+  z-index: 5;
+}
+.top b { font-size: 26px; font-weight: 650; letter-spacing: -0.02em; display: block; line-height: 1.1; }
+.top span { font-size: 12px; color: var(--dim); }
+.cash { text-align: right; }
+.cash b { color: var(--green); }
+
+.daybar { grid-column: 1 / -1; height: 3px; background: var(--line); margin-top: 6px; }
+.daybar i { display: block; height: 100%; background: var(--dim); }
+
+/* ---------------------------------------------------------------- milestone */
+
+.goal {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--green-dim);
+  padding: 12px 14px;
+  margin-bottom: 14px;
+}
+.goal.close { border-left-color: var(--amber); }
+.goal.done { border-left-color: var(--green); }
+
+.goal-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.goal-head b { font-size: 17px; font-weight: 600; }
+.goal.close .goal-head b { color: var(--amber); }
+.goal-head span, .goal.done span { font-size: 13px; color: var(--dim); }
+
+.track { height: 8px; background: #0d100c; border: 1px solid var(--line); margin: 9px 0 5px; }
+.track i { display: block; height: 100%; background: var(--green); }
+.goal.close .track i { background: var(--amber); }
+
+.goal-foot { display: flex; justify-content: space-between; font-size: 11px; color: var(--dim); }
+
+/* --------------------------------------------------------------------- map */
+
+.mapwrap { background: var(--card); border: 1px solid var(--line); padding: 4px; }
+.map { display: block; width: 100%; height: auto; touch-action: manipulation; }
+
+.map .grid { stroke: #1c211a; stroke-width: 0.035; }
+.map .route { stroke-width: 0.09; stroke-dasharray: 0.3 0.25; opacity: 0.85; }
+.map .route.ok { stroke: var(--green-dim); }
+.map .route.soon { stroke: var(--amber); }
+.map .route.late { stroke: var(--red); }
+
+.map .preview { stroke: var(--dim); stroke-width: 0.07; stroke-dasharray: 0.15 0.2; }
+.map .preview.solid { stroke: var(--text); stroke-width: 0.11; stroke-dasharray: none; }
+
+.map .node { cursor: pointer; }
+.map .hit { fill: transparent; }
+.map .pip { fill: #39412f; stroke: #4a5440; stroke-width: 0.05; }
+.map .pickup .pip { fill: #2f3a45; stroke: #47576a; }
+.map .name {
+  font-size: 0.42px;
+  fill: var(--dim);
+  text-anchor: middle;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  pointer-events: none;
+}
+.map .count {
+  font-size: 0.45px;
+  font-weight: 700;
+  fill: #10130f;
+  text-anchor: middle;
+  pointer-events: none;
+}
+
+.map .pending .pip { fill: var(--green); stroke: none; }
+.map .pending.soon .pip { fill: var(--amber); }
+.map .pending.late .pip { fill: var(--red); }
+.map .pending .name { fill: var(--text); }
+
+.map .here .pip { fill: none; stroke: var(--text); stroke-width: 0.16; }
+.map .here .name { fill: var(--text); font-weight: 700; }
+
+.map .preview-pickup .pip { fill: var(--text); stroke: none; }
+.map .preview-drop .pip { fill: none; stroke: var(--text); stroke-width: 0.13; }
+
+.map .node:hover .pip { stroke: var(--text); stroke-width: 0.09; }
+.map .node:focus-visible { outline: none; }
+.map .node:focus-visible .pip { stroke: var(--green); stroke-width: 0.14; }
+
+/* ------------------------------------------------------------------ moving */
+
+.move { margin-top: 16px; }
 
 button {
   font: inherit;
-  font-size: 12px;
-  padding: 4px 10px;
-  background: #262b21;
+  cursor: pointer;
+  background: var(--card-2);
   color: var(--text);
   border: 1px solid var(--line);
-  cursor: pointer;
+  padding: 9px 14px;
+  text-align: left;
 }
-button:hover:not(:disabled) { background: #323828; }
-button:disabled { opacity: 0.35; cursor: not-allowed; }
-button.go { border-color: var(--green); color: var(--green); }
-button.stop { border-color: var(--line); color: var(--dim); }
-button:focus-visible { outline: 2px solid var(--green); outline-offset: 1px; }
+button:hover:not(:disabled) { background: #29301f; border-color: #3c4436; }
+button:disabled { opacity: 0.4; cursor: not-allowed; }
+button:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
 
-.tag { font-size: 10px; padding: 1px 5px; border: 1px solid var(--line); letter-spacing: 0.06em; }
-.EXPRESS { color: var(--red); border-color: var(--red); }
-.STANDARD { color: var(--amber); border-color: var(--amber); }
-.SCHEDULED { color: var(--dim); }
+button.primary {
+  display: block;
+  width: 100%;
+  background: var(--green-dim);
+  border-color: var(--green);
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 600;
+  padding: 13px 15px;
+}
+button.primary:hover { background: #357554; }
+button.primary em { display: block; font-style: normal; font-size: 12.5px; font-weight: 400; color: #b9d9c7; margin-top: 3px; }
 
-.dim { color: var(--dim); }
-.green { color: var(--green); }
-.amber { color: var(--amber); }
-.red { color: var(--red); }
+.minor { display: flex; gap: 8px; margin-top: 9px; flex-wrap: wrap; }
+.minor button { font-size: 13px; padding: 7px 12px; }
+button.quiet { color: var(--dim); background: transparent; }
 
-.slots { display: flex; gap: 5px; flex-wrap: wrap; }
-.slot { border: 1px solid var(--line); padding: 3px 8px; font-size: 11px; color: var(--dim); }
-.slot.full { border-color: var(--green); color: var(--green); }
+.hint { font-size: 12px; color: var(--dim); margin: 9px 0 0; }
 
-#log { max-height: 150px; overflow-y: auto; font-size: 11px; color: var(--dim); }
-#log div { padding: 1px 0; }
+/* ------------------------------------------------------------------ offers */
 
-.end { border-color: var(--green); }
-.end table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.end td { padding: 3px 0; }
-.end td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
-.end tr.total td { border-top: 1px solid var(--line); padding-top: 7px; font-size: 16px; color: var(--green); }
+.offers { display: flex; flex-direction: column; gap: 9px; }
+
+.offer {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line);
+  padding: 12px 14px 11px;
+}
+.offer.easy { border-left-color: var(--green); }
+.offer.tight { border-left-color: var(--green-dim); }
+.offer.risky { border-left-color: var(--amber); }
+.offer.no { border-left-color: var(--red); opacity: 0.72; }
+
+.offer-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.fee { font-size: 21px; font-weight: 650; color: var(--green); letter-spacing: -0.02em; }
+
+.verdict { font-size: 11.5px; font-weight: 600; letter-spacing: 0.04em; }
+.verdict.easy { color: var(--green); }
+.verdict.tight { color: var(--dim); }
+.verdict.risky { color: var(--amber); }
+.verdict.no { color: var(--red); }
+
+.trip { margin: 7px 0 5px; font-size: 14.5px; line-height: 1.45; }
+.trip b { font-weight: 600; }
+
+.detail { margin: 0 0 10px; font-size: 12px; color: var(--dim); }
+
+.offer-actions { display: flex; align-items: center; gap: 8px; }
+.offer-actions .take { border-color: var(--green); color: var(--green); font-weight: 600; }
+.offer-actions .take:hover:not(:disabled) { background: var(--green-dim); color: var(--text); }
+.offer-actions .pass { color: var(--dim); background: transparent; }
+.expiry { margin-left: auto; font-size: 11.5px; color: var(--dim); }
+
+/* ---------------------------------------------------------------- carrying */
+
+.carrying { list-style: none; margin: 0; padding: 0; }
+.carrying li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--green-dim);
+  margin-bottom: 6px;
+  font-size: 14px;
+}
+.carrying li.soon { border-left-color: var(--amber); }
+.carrying li.late { border-left-color: var(--red); }
+.carrying .when { color: var(--dim); white-space: nowrap; font-size: 13px; }
+.carrying li.soon .when { color: var(--amber); }
+.carrying li.late .when { color: var(--red); }
+
+/* ----------------------------------------------------------------- summary */
+
+.summary { padding-top: 24px; }
+.summary h2 { font-size: 13px; margin-bottom: 14px; }
+.summary table { width: 100%; border-collapse: collapse; font-size: 15px; }
+.summary td { padding: 7px 0; }
+.summary td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+.summary tr.cost td { color: var(--dim); }
+.summary tr.total td {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+  font-size: 24px;
+  font-weight: 650;
+  color: var(--green);
+}
+.waited { font-size: 13.5px; color: var(--dim); line-height: 1.6; margin: 16px 0 20px; }
+.waited b { color: var(--text); }
+.flag { color: var(--amber); display: block; margin-top: 3px; }
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
