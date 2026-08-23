@@ -8,7 +8,7 @@
  * Not part of the build; nothing imports it.
  */
 import { runMany } from "../src/sim/bot.js";
-import { DEFAULT_ECONOMY } from "../src/sim/economy.js";
+import { DEFAULT_CONFIG } from "../src/sim/config.js";
 
 const SHIFTS = 400;
 
@@ -16,7 +16,7 @@ console.log("\n  offer gap sweep — selective policy, 400 shifts each\n");
 console.log("  gap  orders  onTime    net   ₹/hr    12%    20%    28%   mile share");
 
 for (const gap of [13, 15, 17, 19, 21, 24]) {
-  const cfg = { ...DEFAULT_ECONOMY, offerIntervalMean: gap };
+  const cfg = { ...DEFAULT_CONFIG, offerIntervalMean: gap };
   const a = runMany(SHIFTS, cfg, "selective");
   const n = a.shifts;
   const pct = (x: number) => `${((x / n) * 100).toFixed(0)}%`;
@@ -24,7 +24,7 @@ for (const gap of [13, 15, 17, 19, 21, 24]) {
     `  ${String(gap).padStart(3)}  ${(a.delivered / n).toFixed(1).padStart(6)}  ` +
       `${(a.onTime / n).toFixed(1).padStart(6)}  ` +
       `${Math.round(a.net / n).toString().padStart(5)}  ` +
-      `${(a.net / n / (cfg.shiftMinutes / 60)).toFixed(0).padStart(5)}  ` +
+      `${(a.net / n / (cfg.dayMinutes / 60)).toFixed(0).padStart(5)}  ` +
       `${pct(a.hits[0] ?? 0).padStart(5)}  ${pct(a.hits[1] ?? 0).padStart(5)}  ${pct(a.hits[2] ?? 0).padStart(5)}  ` +
       `${((a.milestones / a.net) * 100).toFixed(0)}%`,
   );

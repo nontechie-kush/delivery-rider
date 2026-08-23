@@ -1,20 +1,20 @@
 import { describe, expect, it } from "vitest";
 import {
-  DEFAULT_ECONOMY as E,
+  DEFAULT_CONFIG as E,
   demandAt,
   hourAt,
   trafficAt,
-} from "../src/sim/economy.js";
-import { createShift, idle, rideMinutes } from "../src/sim/shift.js";
+} from "../src/sim/config.js";
+import { createShift, idle, rideMinutes, startDuty } from "../src/sim/shift.js";
 
 /** Minutes into the shift at a given wall-clock hour. */
-const at = (hour: number) => (hour - E.startHour) * 60 + 30;
+const at = (hour: number) => (hour - E.dayStartHour) * 60 + 30;
 
-describe("the shift clock", () => {
-  it("starts at one and runs to ten", () => {
-    expect(E.startHour).toBe(13);
-    expect(hourAt(0, E)).toBe(13);
-    expect(hourAt(E.shiftMinutes - 1, E)).toBe(21);
+describe("the working day", () => {
+  it("opens at six in the morning and stays open twenty hours", () => {
+    expect(E.dayStartHour).toBe(6);
+    expect(hourAt(0, E)).toBe(6);
+    expect(E.dayMinutes).toBe(20 * 60);
   });
 
   /**
@@ -22,7 +22,7 @@ describe("the shift clock", () => {
    * before the evening block, the demand curve stops doing any work and the
    * "when do I rest" decision disappears with it.
    */
-  it("covers the lunch peak, the afternoon lull, and the evening block", () => {
+  it("spans the lunch peak, the afternoon lull, and the evening block", () => {
     expect(demandAt(at(13), E)).toBeGreaterThan(3);
     expect(demandAt(at(17), E)).toBeLessThan(1);
     expect(demandAt(at(20), E)).toBeGreaterThan(2);
@@ -42,7 +42,8 @@ describe("demand", () => {
   it("delivers many more offers during a peak hour than a dead one", () => {
     const countOver = (startHour: number) => {
       const s = createShift(4);
-      idle(s, Math.max(0, (startHour - E.startHour) * 60));
+      idle(s, Math.max(0, (startHour - E.dayStartHour) * 60));
+      startDuty(s);
       const before = s.seq;
       idle(s, 60);
       return s.seq - before;
@@ -77,7 +78,7 @@ describe("expenses", () => {
     // structural mistake does. Measured reality is 32% of gross.
     const perKm = E.expensePerKm;
     const typicalKm = 90; // a full shift of riding, per measured 70-100 km
-    const cost = E.shiftExpenses + typicalKm * perKm;
+    const cost = E.dailyExpenses + typicalKm * perKm;
     expect(cost).toBeGreaterThan(300);
     expect(cost).toBeLessThan(900);
   });

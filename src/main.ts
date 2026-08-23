@@ -1,6 +1,6 @@
 import "./style.css";
 import { node } from "./sim/city.js";
-import { DEFAULT_ECONOMY } from "./sim/economy.js";
+import { DEFAULT_CONFIG } from "./sim/config.js";
 import {
   accept,
   createShift,
@@ -34,7 +34,7 @@ import {
  * because the map has to stay visible while the work list stays reachable.
  */
 
-const cfg = DEFAULT_ECONOMY;
+const cfg = DEFAULT_CONFIG;
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("#app not found");
 

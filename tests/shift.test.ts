@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { used } from "../src/sim/bag.js";
-import { distance, travelMinutes } from "../src/sim/city.js";
-import { DEFAULT_ECONOMY as E } from "../src/sim/economy.js";
+import { distance } from "../src/sim/city.js";
+import { DEFAULT_CONFIG as E } from "../src/sim/config.js";
+import { startDuty, stopDuty } from "../src/sim/shift.js";
 import {
   accept,
   canAccept,
@@ -14,12 +15,43 @@ import {
   travelTo,
 } from "../src/sim/shift.js";
 
+/**
+ * A shift with the rider on duty at the lunch peak and a few offers already in
+ * the queue. Going on duty does not conjure work — it has to arrive.
+ */
+function onDuty(seed: number) {
+  const s = createShift(seed);
+  idle(s, (13 - E.dayStartHour) * 60);
+  startDuty(s);
+  for (let i = 0; i < 30 && s.offers.length === 0; i++) idle(s, 3);
+  return s;
+}
+
 describe("createShift", () => {
   it("is deterministic for a seed", () => {
-    const a = createShift(5);
-    const b = createShift(5);
+    const a = onDuty(5);
+    const b = onDuty(5);
     expect(a.offers.map((o) => o.id)).toEqual(b.offers.map((o) => o.id));
     expect(a.offers[0]?.fee).toBe(b.offers[0]?.fee);
+  });
+
+  it("offers nothing until the rider goes on duty", () => {
+    const s = createShift(1);
+    expect(s.duty.online).toBe(false);
+    idle(s, 400);
+    expect(s.offers).toHaveLength(0);
+
+    startDuty(s);
+    for (let i = 0; i < 40 && s.offers.length === 0; i++) idle(s, 3);
+    expect(s.offers.length).toBeGreaterThan(0);
+  });
+
+  it("stops offering the moment the rider goes off duty", () => {
+    const s = onDuty(1);
+    expect(s.offers.length).toBeGreaterThan(0);
+    stopDuty(s);
+    expect(s.offers).toHaveLength(0);
+    expect(s.duty.online).toBe(false);
   });
 
   it("starts at the dark store with an empty bag and a fresh clock", () => {
@@ -30,14 +62,11 @@ describe("createShift", () => {
     expect(s.completed).toHaveLength(0);
   });
 
-  it("opens with at least one offer so the first decision is immediate", () => {
-    expect(createShift(1).offers.length).toBeGreaterThan(0);
-  });
 });
 
 describe("accept and reject", () => {
   it("moves an offer into the bag", () => {
-    const s = createShift(3);
+    const s = onDuty(3);
     const id = s.offers[0]!.id;
     expect(accept(s, id)).toBe(true);
     expect(used(s.bag)).toBe(1);
@@ -47,7 +76,7 @@ describe("accept and reject", () => {
   });
 
   it("stamps the deadline from acceptance, not from when the offer appeared", () => {
-    const s = createShift(3);
+    const s = onDuty(3);
     idle(s, 30);
     const order = s.offers[0]!;
     const at = s.clock;
@@ -56,13 +85,13 @@ describe("accept and reject", () => {
   });
 
   it("refuses an unknown id", () => {
-    const s = createShift(3);
+    const s = onDuty(3);
     expect(accept(s, "nope")).toBe(false);
     expect(canAccept(s, "nope")).toBe(false);
   });
 
   it("refuses to accept once the bag is full", () => {
-    const s = createShift(9);
+    const s = onDuty(9);
     idle(s, 200); // let plenty of offers pile up
     let taken = 0;
     for (const o of [...s.offers]) {
@@ -73,7 +102,7 @@ describe("accept and reject", () => {
   });
 
   it("drops a rejected offer from the queue", () => {
-    const s = createShift(4);
+    const s = onDuty(4);
     const id = s.offers[0]!.id;
     expect(reject(s, id)).toBe(true);
     expect(s.offers.find((o) => o.id === id)).toBeUndefined();
@@ -87,7 +116,6 @@ describe("travel", () => {
     // Rides are quoted through rideMinutes now, which scales the base travel
     // time by the current hour's congestion.
     const expected = rideMinutes(s, "qk", "d4");
-    expect(expected).toBeGreaterThan(travelMinutes("qk", "d4"));
     travelTo(s, "d4");
     expect(s.clock).toBeCloseTo(expected, 6);
     expect(s.locationId).toBe("d4");
@@ -107,7 +135,8 @@ describe("travel", () => {
   });
 
   it("expires offers that timed out while riding", () => {
-    const s = createShift(6);
+    const s = onDuty(6);
+    idle(s, 30);
     const ids = s.offers.map((o) => o.id);
     travelTo(s, "d6"); // a long ride
     for (const id of ids) {
@@ -119,7 +148,7 @@ describe("travel", () => {
 
 describe("pickup, waiting and delivery", () => {
   it("collects at the pickup and delivers at the drop", () => {
-    const s = createShift(11);
+    const s = onDuty(11);
     const order = s.offers[0]!;
     accept(s, order.id);
 
@@ -134,7 +163,7 @@ describe("pickup, waiting and delivery", () => {
   });
 
   it("makes the rider wait when the food is not ready yet", () => {
-    const s = createShift(11);
+    const s = onDuty(11);
     // Biryani Junction has a long prep; ride straight there and stand around.
     const order = [...s.offers].find((o) => o.pickupId === "bj");
     if (!order) return; // seed-dependent; other tests cover the general case
@@ -145,7 +174,7 @@ describe("pickup, waiting and delivery", () => {
   });
 
   it("pays half for a late delivery", () => {
-    const s = createShift(11);
+    const s = onDuty(11);
     const order = s.offers[0]!;
     accept(s, order.id);
     travelTo(s, order.pickupId);
@@ -159,7 +188,7 @@ describe("pickup, waiting and delivery", () => {
   });
 
   it("delivers two orders sharing a drop in a single visit", () => {
-    const s = createShift(21);
+    const s = onDuty(21);
     idle(s, 120);
     const first = s.offers[0]!;
     accept(s, first.id);
@@ -177,7 +206,7 @@ describe("pickup, waiting and delivery", () => {
 
 describe("endShift", () => {
   it("nets fees plus milestones minus expenses", () => {
-    const s = createShift(11);
+    const s = onDuty(11);
     const order = s.offers[0]!;
     accept(s, order.id);
     travelTo(s, order.pickupId);
@@ -188,24 +217,24 @@ describe("endShift", () => {
     expect(sum.milestones).toBe(0);
     // Fixed daily cost plus fuel and wear over the distance actually covered.
     expect(sum.expenses).toBe(
-      Math.round(E.shiftExpenses + sum.unitsRidden * E.expensePerKm),
+      Math.round(E.dailyExpenses + sum.unitsRidden * E.expensePerKm),
     );
-    expect(sum.expenses).toBeGreaterThan(E.shiftExpenses);
+    expect(sum.expenses).toBeGreaterThan(E.dailyExpenses);
     expect(sum.net).toBe(sum.fees + sum.milestones - sum.expenses);
   });
 
   it("counts orders still in the bag as undelivered", () => {
-    const s = createShift(11);
+    const s = onDuty(11);
     accept(s, s.offers[0]!.id);
     const sum = endShift(s);
     expect(sum.undelivered).toBe(1);
     expect(sum.ordersDelivered).toBe(0);
   });
 
-  it("reports the shift as over once the clock runs out", () => {
+  it("reports the day as over once the clock runs out", () => {
     const s = createShift(1);
     expect(isOver(s)).toBe(false);
-    idle(s, E.shiftMinutes);
+    idle(s, E.dayMinutes);
     expect(isOver(s)).toBe(true);
   });
 });

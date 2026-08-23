@@ -1,14 +1,28 @@
 import { load, makeBag, fits, unload } from "./bag.js";
 import { BIKE_MIN_PER_KM, START_NODE_ID, distance, node, travelMinutes } from "./city.js";
 import {
-  DEFAULT_ECONOMY,
+  DEFAULT_CONFIG,
   demandAt,
   hourAt,
   milestoneBonus,
   paidFee,
+  placeOf,
   trafficAt,
-  type EconomyConfig,
-} from "./economy.js";
+  type GameConfig,
+} from "./config.js";
+import {
+  accrue,
+  createDuty,
+  goOffline,
+  goOnline,
+  incentivesVoid,
+  recordAccept,
+  acceptanceRate,
+  recordReject,
+  settleSlot,
+  type DutyState,
+  type SlotOutcome,
+} from "./duty.js";
 import { generateOrder, nextOfferGap } from "./orders.js";
 import { makeRng, type Rng } from "./rng.js";
 import type { Carried, Order, Slot } from "./types.js";
@@ -27,7 +41,7 @@ export interface Completed {
 }
 
 export interface ShiftState {
-  cfg: EconomyConfig;
+  cfg: GameConfig;
   rng: Rng;
   /** Game-minutes elapsed in the shift. */
   clock: number;
@@ -40,8 +54,9 @@ export interface ShiftState {
   dropped: Order[];
   seq: number;
   nextOfferAt: number;
-  /** Kilometres ridden this shift. Expenses are charged against this. */
+  /** Kilometres ridden today. Expenses are charged against this. */
   unitsRidden: number;
+  duty: DutyState;
   log: string[];
 }
 
@@ -59,11 +74,21 @@ export interface ShiftSummary {
   /** How much of that waiting the app never showed. */
   minutesWaitingHidden: number;
   undelivered: number;
+  /** Minutes actually spent on duty. */
+  minutesOnline: number;
+  /** Accepted over offered, or null if too few offers to judge. */
+  acceptance: number | null;
+  /** True when acceptance fell below the platform's floor and voided incentives. */
+  incentivesVoided: boolean;
+  /** How the booked slot settled, if one was booked. */
+  slot: SlotOutcome | null;
+  /** Top-up paid because a met guarantee exceeded what was earned. */
+  guaranteeTopUp: number;
   /** Kilometres ridden. */
   unitsRidden: number;
 }
 
-export function createShift(seed: number, cfg: EconomyConfig = DEFAULT_ECONOMY): ShiftState {
+export function createShift(seed: number, cfg: GameConfig = DEFAULT_CONFIG): ShiftState {
   const rng = makeRng(seed);
   const state: ShiftState = {
     cfg,
@@ -78,23 +103,30 @@ export function createShift(seed: number, cfg: EconomyConfig = DEFAULT_ECONOMY):
     seq: 0,
     nextOfferAt: 0,
     unitsRidden: 0,
+    duty: createDuty(),
     log: [],
   };
-  refreshOffers(state);
   return state;
 }
 
 export function isOver(state: ShiftState): boolean {
-  return state.clock >= state.cfg.shiftMinutes;
+  return state.clock >= state.cfg.dayMinutes;
 }
 
-/** Spawns any offers due by the current clock and drops expired ones. */
+/**
+ * Spawns any offers due by the current clock and drops expired ones.
+ *
+ * Nothing is offered while off duty — that is the entire cost of stepping away,
+ * and the reason riders stay logged in through weather, meals and worse.
+ */
 function refreshOffers(state: ShiftState): void {
-  while (state.nextOfferAt <= state.clock && state.nextOfferAt < state.cfg.shiftMinutes) {
-    state.seq += 1;
-    state.offers.push(
-      generateOrder(state.rng, state.nextOfferAt, state.seq, state.cfg, state.locationId),
-    );
+  while (state.nextOfferAt <= state.clock && state.nextOfferAt < state.cfg.dayMinutes) {
+    if (state.duty.online) {
+      state.seq += 1;
+      state.offers.push(
+        generateOrder(state.rng, state.nextOfferAt, state.seq, state.cfg, state.locationId),
+      );
+    }
     state.nextOfferAt += nextOfferGap(
       state.rng,
       state.cfg,
@@ -106,6 +138,7 @@ function refreshOffers(state: ShiftState): void {
 
 function advance(state: ShiftState, minutes: number): void {
   state.clock += minutes;
+  accrue(state.duty, state.clock, state.cfg);
   refreshOffers(state);
 }
 
@@ -134,6 +167,7 @@ export function accept(state: ShiftState, id: string): boolean {
   order.dueAt = state.clock + state.cfg.tiers[order.tier].window;
 
   state.offers = state.offers.filter((o) => o.id !== id);
+  recordAccept(state.duty);
   state.carried.push({ order, leg: "TO_PICKUP", pickedUpAt: null, waited: 0 });
   state.log.push(`Took a ${order.tier.toLowerCase()} order to ${node(order.dropId).name}, ₹${order.fee}.`);
   return true;
@@ -142,7 +176,9 @@ export function accept(state: ShiftState, id: string): boolean {
 export function reject(state: ShiftState, id: string): boolean {
   const before = state.offers.length;
   state.offers = state.offers.filter((o) => o.id !== id);
-  return state.offers.length < before;
+  if (state.offers.length === before) return false;
+  recordReject(state.duty, state.clock, state.cfg);
+  return true;
 }
 
 /**
@@ -209,7 +245,7 @@ function collectAndDeliver(state: ShiftState): void {
       );
     }
     // Bagging it up, even when it was ready and waiting.
-    advance(state, node(state.locationId).handover);
+    advance(state, placeOf(state.locationId, state.cfg).handover);
     for (const c of toCollect) {
       c.leg = "TO_DROP";
       c.pickedUpAt = state.clock;
@@ -226,7 +262,7 @@ function collectAndDeliver(state: ShiftState): void {
   // The door itself: the guard, the lift, the floor, the phone call. Charged
   // once per visit rather than per parcel, which is part of why batching to a
   // shared drop pays.
-  if (toDeliver.length > 0) advance(state, node(state.locationId).handover);
+  if (toDeliver.length > 0) advance(state, placeOf(state.locationId, state.cfg).handover);
 
   for (const c of toDeliver) {
     const late = state.clock > c.order.dueAt;
@@ -255,6 +291,29 @@ function collectAndDeliver(state: ShiftState): void {
   state.carried = state.carried.filter((c) => !deliveredIds.has(c.order.id));
 }
 
+/** Go on duty. Nothing is offered until this happens. */
+export function startDuty(state: ShiftState): boolean {
+  const ok = goOnline(state.duty, state.clock);
+  if (ok) {
+    state.log.push(`Went on duty at ${fmt(state.clock, state.cfg)}.`);
+    refreshOffers(state);
+  }
+  return ok;
+}
+
+/** Go off duty. Offers stop, and any slot commitment covering now is broken. */
+export function stopDuty(state: ShiftState): boolean {
+  const before = state.duty.commitment?.brokenReason ?? null;
+  const ok = goOffline(state.duty, state.clock, state.cfg);
+  if (ok) {
+    state.offers = [];
+    state.log.push(`Went off duty at ${fmt(state.clock, state.cfg)}.`);
+    const after = state.duty.commitment?.brokenReason ?? null;
+    if (after && after !== before) state.log.push(`Guarantee lost — ${after}`);
+  }
+  return ok;
+}
+
 /** Stand still for a while — usually to let offers accumulate. */
 export function idle(state: ShiftState, minutes: number): void {
   advance(state, minutes);
@@ -264,14 +323,30 @@ export function endShift(state: ShiftState): ShiftSummary {
   for (const c of state.carried) state.dropped.push(c.order);
   state.carried = [];
 
+  accrue(state.duty, state.clock, state.cfg);
+
   const fees = state.completed.reduce((sum, c) => sum + c.paid, 0);
   const onTime = state.completed.filter((c) => !c.late).length;
-  const milestones = milestoneBonus(onTime, state.cfg);
+
+  // Acceptance below the platform's floor voids the day's incentives outright.
+  // Riders take orders they know are bad for them precisely to avoid this.
+  const voided = incentivesVoid(state.duty, state.cfg);
+  const milestones = voided ? 0 : milestoneBonus(onTime, state.cfg);
   // Measured at 32% of gross, and nearly all of it is distance. Charging it per
   // unit ridden is what will make the cycle-versus-petrol choice mean something.
   const expenses = Math.round(
-    state.cfg.shiftExpenses + state.unitsRidden * state.cfg.expensePerKm,
+    state.cfg.dailyExpenses + state.unitsRidden * state.cfg.expensePerKm,
   );
+
+  // A met guarantee is a floor, not a bonus: it tops earnings up to the promised
+  // number and pays nothing if you already cleared it. Break any term and it is
+  // worth exactly zero — complete 22 of a required 23 and you keep the base pay.
+  const slot = settleSlot(state.duty, state.clock, state.cfg);
+  const earnedBeforeGuarantee = fees + milestones;
+  const guaranteeTopUp =
+    slot?.met && slot.slot.guarantee > earnedBeforeGuarantee
+      ? slot.slot.guarantee - earnedBeforeGuarantee
+      : 0;
   const minutesWaiting = state.completed.reduce((sum, c) => sum + c.waited, 0);
   const minutesWaitingHidden = state.completed.reduce(
     (sum, c) => sum + Math.max(0, c.waited - c.waitShown),
@@ -285,17 +360,22 @@ export function endShift(state: ShiftState): ShiftSummary {
     fees,
     milestones,
     expenses,
-    net: fees + milestones - expenses,
+    net: fees + milestones + guaranteeTopUp - expenses,
     minutesWaiting,
     minutesWaitingHidden,
     undelivered: state.dropped.length,
     unitsRidden: state.unitsRidden,
+    minutesOnline: state.duty.minutesOnline,
+    acceptance: acceptanceRate(state.duty, state.cfg),
+    incentivesVoided: voided,
+    slot,
+    guaranteeTopUp,
   };
 }
 
 /** Game-minutes as a wall clock, offset from the shift's start hour. */
-export function fmt(minutes: number, cfg: EconomyConfig = DEFAULT_ECONOMY): string {
-  const total = cfg.startHour * 60 + Math.floor(minutes);
+export function fmt(minutes: number, cfg: GameConfig = DEFAULT_CONFIG): string {
+  const total = cfg.dayStartHour * 60 + Math.floor(minutes);
   const h = Math.floor(total / 60) % 24;
   const m = total % 60;
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;

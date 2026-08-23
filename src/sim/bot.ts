@@ -1,10 +1,13 @@
-import type { EconomyConfig } from "./economy.js";
+import type { GameConfig } from "./config.js";
+import { commit } from "./duty.js";
 import {
   accept,
   createShift,
   endShift,
   isOver,
   rideMinutes,
+  startDuty,
+  stopDuty,
   travelTo,
   idle,
   type ShiftSummary,
@@ -84,23 +87,57 @@ function chooseStop(state: ShiftState): Stop | null {
  * It forecasts using `shownPrep` — the number the app displays — so the bot is
  * fooled by exactly the same under-reporting the player is.
  */
-function worthTaking(state: ShiftState, offer: Order, cfg: EconomyConfig): boolean {
+function worthTaking(state: ShiftState, offer: Order, cfg: GameConfig): boolean {
   const queueAhead = state.carried.length * AVG_LEG_MINUTES;
   const toPickup = rideMinutes(state, state.locationId, offer.pickupId);
   const toDrop = rideMinutes(state, offer.pickupId, offer.dropId);
   const forecast = queueAhead + toPickup + offer.shownPrep + toDrop;
 
-  return forecast < cfg.tiers[offer.tier].window * 0.85;
+  if (forecast < cfg.tiers[offer.tier].window * 0.85) return true;
+
+  // Rejecting is not free. Acceptance below the platform's floor voids the whole
+  // day's incentives, and a booked slot dies on the second rejection — so a rider
+  // who cherry-picks past their allowance loses far more than the bad order cost
+  // them. This is why Indian riders take orders they know are bad for them.
+  return !canAffordToReject(state, cfg);
+}
+
+/** Whether one more rejection would still leave acceptance above the floor. */
+function canAffordToReject(state: ShiftState, cfg: GameConfig): boolean {
+  const { offersAccepted, offersRejected, commitment } = state.duty;
+
+  if (commitment && !commitment.brokenReason) {
+    const slot = cfg.slots.find((s) => s.id === commitment.slotId);
+    if (slot && commitment.rejections >= slot.rejectionsAllowed) return false;
+  }
+
+  const decided = offersAccepted + offersRejected;
+  if (decided < cfg.acceptanceGracePeriod) return true;
+  return offersAccepted / (decided + 1) >= cfg.minAcceptanceRate;
 }
 
 export function runShift(
   seed: number,
-  cfg: EconomyConfig,
+  cfg: GameConfig,
   policy: Policy,
 ): ShiftSummary {
   const state = createShift(seed, cfg);
   const capacity =
     policy === "solo" ? 1 : policy === "selective" ? SELECTIVE_CAP : Infinity;
+
+  // A full-timer's day: book the evening guarantee, come on at the lunch peak,
+  // and work through to close. Milestones are day-scale, so the baseline the
+  // economy is balanced against has to be a day rather than a single slot.
+  const evening = cfg.slots.find((s) => s.id === "evening") ?? cfg.slots.at(-1);
+  if (evening) commit(state.duty, evening.id, state.clock, cfg);
+
+  const lunch = cfg.slots.find((s) => s.id === "lunch");
+  const workFrom = lunch ? (lunch.fromHour - cfg.dayStartHour) * 60 : 0;
+  const workTo = evening ? (evening.toHour - cfg.dayStartHour) * 60 : cfg.dayMinutes;
+
+  // Off duty until the lunch rush rather than burning the quiet morning.
+  if (workFrom > 0) idle(state, workFrom);
+  startDuty(state);
 
   // Bounded so a policy bug surfaces as a failed assertion, not a hung process.
   for (let step = 0; step < 5000 && !isOver(state); step++) {
@@ -119,8 +156,12 @@ export function runShift(
       // Nothing to carry and nothing worth taking — stand at the hotspot and wait.
       idle(state, 5);
     }
+
+    // Stay to the end of the booked window, then finish what is in the bag.
+    if (state.clock >= workTo && state.carried.length === 0) break;
   }
 
+  stopDuty(state);
   return endShift(state);
 }
 
@@ -141,7 +182,7 @@ export interface Aggregate {
 
 export function runMany(
   shifts: number,
-  cfg: EconomyConfig,
+  cfg: GameConfig,
   policy: Policy,
   baseSeed = 1,
 ): Aggregate {

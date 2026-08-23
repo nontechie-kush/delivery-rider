@@ -1,10 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_ECONOMY as E } from "../src/sim/economy.js";
-import { accept, createShift, idle, travelTo } from "../src/sim/shift.js";
+import { DEFAULT_CONFIG as E } from "../src/sim/config.js";
+import { accept, createShift, idle, startDuty, travelTo } from "../src/sim/shift.js";
 import { esc, mins, rupees, urgency } from "../src/ui/format.js";
 import { renderMap } from "../src/ui/map.js";
 import { routeStack } from "../src/ui/route.js";
 import { estimate, VERDICT_LABEL } from "../src/ui/verdict.js";
+
+/** On duty at the lunch peak with work already in the queue. */
+function onDutyAt(seed: number) {
+  const s = createShift(seed);
+  idle(s, (13 - E.dayStartHour) * 60);
+  startDuty(s);
+  for (let i = 0; i < 40 && s.offers.length === 0; i++) idle(s, 3);
+  return s;
+}
 
 describe("format", () => {
   it("writes rupees in the Indian grouping", () => {
@@ -29,8 +38,7 @@ describe("format", () => {
 
 describe("estimate", () => {
   it("returns a known verdict for every offer in a fresh shift", () => {
-    const s = createShift(3);
-    idle(s, 60);
+    const s = onDutyAt(3);
     for (const offer of s.offers) {
       const e = estimate(s, offer, E);
       expect(Object.keys(VERDICT_LABEL)).toContain(e.verdict);
@@ -40,10 +48,10 @@ describe("estimate", () => {
   });
 
   it("gets less optimistic as the bag fills", () => {
-    const s = createShift(3);
     // Offers expire after 12 minutes, so idle in short steps until two coexist
     // rather than skipping ahead and finding an almost-empty queue.
-    for (let i = 0; i < 20 && s.offers.length < 2; i++) idle(s, 3);
+    const s = onDutyAt(3);
+    for (let i = 0; i < 40 && s.offers.length < 2; i++) idle(s, 3);
     expect(s.offers.length).toBeGreaterThanOrEqual(2);
 
     const offer = s.offers[0]!;
@@ -62,8 +70,8 @@ describe("estimate", () => {
    * the UI becomes honest and the restaurant-wait mechanic loses its bite.
    */
   it("forecasts the wait from the shown prep time, not the real one", () => {
-    const s = createShift(3);
-    for (let i = 0; i < 40 && !s.offers.some((o) => o.pickupId === "bj"); i++) idle(s, 3);
+    const s = onDutyAt(3);
+    for (let i = 0; i < 60 && !s.offers.some((o) => o.pickupId === "bj"); i++) idle(s, 3);
     const liar = s.offers.find((o) => o.pickupId === "bj");
     if (!liar) return;
 
@@ -88,23 +96,20 @@ describe("renderMap", () => {
   });
 
   it("draws a route for each pending stop", () => {
-    const s = createShift(7);
-    idle(s, 40);
+    const s = onDutyAt(7);
     accept(s, s.offers[0]!.id);
     expect(renderMap(s, null)).toContain('class="leg ');
   });
 
   it("draws the preview line only when an offer is being considered", () => {
-    const s = createShift(7);
-    idle(s, 40);
+    const s = onDutyAt(7);
     const id = s.offers[0]!.id;
     expect(renderMap(s, null)).not.toContain('class="preview"');
     expect(renderMap(s, id)).toContain('class="preview"');
   });
 
   it("survives a mid-shift state without throwing", () => {
-    const s = createShift(12);
-    idle(s, 100);
+    const s = onDutyAt(12);
     accept(s, s.offers[0]!.id);
     travelTo(s, s.carried[0]!.order.pickupId);
     expect(() => renderMap(s, null)).not.toThrow();

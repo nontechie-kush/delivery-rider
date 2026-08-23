@@ -14,29 +14,13 @@ export interface CityNode {
   /** The real Gurgaon neighbourhood this sits in. */
   area: string;
   kind: NodeKind;
-  /**
-   * Minutes lost at the door on arrival — the lift, the guard, the gate, the
-   * customer who does not pick up. Real deliveries burn three to six minutes
-   * here and platforms count none of it. High-rise blocks are the worst.
-   */
-  handover: number;
-  /** Grid coordinates. Travel time is derived from these, never stored. */
+  /** Projected kilometres from the zone's north-west corner. */
   x: number;
   y: number;
 }
 
 export interface Pickup extends CityNode {
   kind: "PICKUP";
-  /** Mean true prep time in game-minutes. */
-  prepMean: number;
-  /** Spread around the mean. */
-  prepSpread: number;
-  /**
-   * How much this place under-reports its prep time, as a fraction.
-   * 0 = honest, 0.6 = shows you 40% of the real wait.
-   * Documented reality: platforms do not count restaurant wait time.
-   */
-  optimism: number;
 }
 
 export interface Order {

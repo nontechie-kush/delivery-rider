@@ -13,7 +13,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { checksum, runMany, type Aggregate } from "../src/sim/bot.js";
-import { DEFAULT_ECONOMY } from "../src/sim/economy.js";
+import { DEFAULT_CONFIG } from "../src/sim/config.js";
 
 const SHIFTS = 1000;
 const SEED = 42;
@@ -36,9 +36,9 @@ function report(label: string, agg: Aggregate): void {
   );
 }
 
-const selective = runMany(SHIFTS, DEFAULT_ECONOMY, "selective", SEED);
-const greedy = runMany(SHIFTS, DEFAULT_ECONOMY, "greedy", SEED);
-const solo = runMany(SHIFTS, DEFAULT_ECONOMY, "solo", SEED);
+const selective = runMany(SHIFTS, DEFAULT_CONFIG, "selective", SEED);
+const greedy = runMany(SHIFTS, DEFAULT_CONFIG, "greedy", SEED);
+const solo = runMany(SHIFTS, DEFAULT_CONFIG, "solo", SEED);
 const sum = checksum(selective);
 
 console.log(`\n  golden run — seed ${SEED}, ${SHIFTS} shifts`);

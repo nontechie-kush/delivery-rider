@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { distance } from "../src/sim/city.js";
-import { DEFAULT_ECONOMY as E } from "../src/sim/economy.js";
+import { DEFAULT_CONFIG as E } from "../src/sim/config.js";
 import { generateOrder } from "../src/sim/orders.js";
 import { makeRng } from "../src/sim/rng.js";
 

@@ -1,15 +1,8 @@
-import { DROPS, PICKUPS, distance, pickup } from "./city.js";
-import { orderFee, type EconomyConfig } from "./economy.js";
+import { DROPS, PICKUPS, distance } from "./city.js";
+import { orderFee, placeOf, type GameConfig } from "./config.js";
 import type { Rng } from "./rng.js";
-import type { CityNode, Order, Temp, Tier } from "./types.js";
+import type { CityNode, Order, Tier } from "./types.js";
 
-/** What each place actually sends out. Generation policy, not city geography. */
-const TEMPS: Record<string, readonly Temp[]> = {
-  qk: ["COLD", "AMBIENT", "AMBIENT", "COLD"],
-  bj: ["HOT", "HOT", "HOT"],
-  fc: ["HOT", "HOT", "COLD"],
-  gm: ["AMBIENT", "AMBIENT", "COLD"],
-};
 
 /** EXPRESS is a quick-commerce promise. Only the dark store can make it. */
 const EXPRESS_PICKUP_ID = "qk";
@@ -26,8 +19,8 @@ const EXPRESS_PICKUP_ID = "qk";
  * The long haul still turns up, just rarely — and distance pay makes it worth
  * considering when it does.
  */
-function weightedDrop(rng: Rng, pickupId: string, candidates: readonly CityNode[]): CityNode {
-  const weights = candidates.map((d) => 1 / (1 + distance(pickupId, d.id) ** 1.4));
+function weightedDrop(rng: Rng, pickupId: string, candidates: readonly CityNode[], cfg: GameConfig): CityNode {
+  const weights = candidates.map((d) => 1 / (1 + distance(pickupId, d.id) ** cfg.dropProximityBias));
   const total = weights.reduce((sum, w) => sum + w, 0);
 
   let roll = rng.float(0, total);
@@ -53,8 +46,8 @@ function weightedDrop(rng: Rng, pickupId: string, candidates: readonly CityNode[
  * Consequence worth keeping: where the player idles now decides what they are
  * offered next, so the gap between orders is a positioning decision.
  */
-function weightedPickup(rng: Rng, nearNodeId: string): (typeof PICKUPS)[number] {
-  const weights = PICKUPS.map((p) => 1 / (1 + distance(nearNodeId, p.id) ** 1.6));
+function weightedPickup(rng: Rng, nearNodeId: string, cfg: GameConfig): (typeof PICKUPS)[number] {
+  const weights = PICKUPS.map((p) => 1 / (1 + distance(nearNodeId, p.id) ** cfg.pickupProximityBias));
   const total = weights.reduce((sum, w) => sum + w, 0);
 
   let roll = rng.float(0, total);
@@ -68,7 +61,7 @@ function weightedPickup(rng: Rng, nearNodeId: string): (typeof PICKUPS)[number] 
   return rng.pick(PICKUPS);
 }
 
-function weightedTier(rng: Rng, cfg: EconomyConfig): Tier {
+function weightedTier(rng: Rng, cfg: GameConfig): Tier {
   const tiers = Object.keys(cfg.tiers) as Tier[];
   const total = tiers.reduce((sum, t) => sum + cfg.tiers[t].weight, 0);
   let roll = rng.float(0, total);
@@ -87,7 +80,7 @@ export function generateOrder(
   rng: Rng,
   now: number,
   seq: number,
-  cfg: EconomyConfig,
+  cfg: GameConfig,
   /** Where the rider is standing. Dispatch offers from stores near them. */
   nearNodeId: string,
 ): Order {
@@ -95,14 +88,14 @@ export function generateOrder(
   const t = cfg.tiers[tier];
 
   const pickupId =
-    tier === "EXPRESS" ? EXPRESS_PICKUP_ID : weightedPickup(rng, nearNodeId).id;
+    tier === "EXPRESS" ? EXPRESS_PICKUP_ID : weightedPickup(rng, nearNodeId, cfg).id;
 
   // Only drops the tier can legitimately promise.
   const reachable = DROPS.filter((d) => distance(pickupId, d.id) <= t.maxDistance);
-  const drop = weightedDrop(rng, pickupId, reachable.length > 0 ? reachable : DROPS);
+  const drop = weightedDrop(rng, pickupId, reachable.length > 0 ? reachable : DROPS, cfg);
 
   const dist = distance(pickupId, drop.id);
-  const place = pickup(pickupId);
+  const place = placeOf(pickupId, cfg);
 
   const truePrep = Math.max(
     1,
@@ -111,7 +104,7 @@ export function generateOrder(
   // The app never over-reports. That is the whole point of the mechanic.
   const shownPrep = truePrep * (1 - place.optimism);
 
-  const temps = TEMPS[pickupId] ?? ["AMBIENT"];
+  const temps = place.temps.length > 0 ? place.temps : cfg.defaultPlace.temps;
 
   return {
     id: `o${seq}`,
@@ -136,7 +129,7 @@ export function generateOrder(
  * divides the gap to roughly a quarter and the 5pm trough stretches it out.
  * Floored so a dead hour still trickles rather than stopping dead.
  */
-export function nextOfferGap(rng: Rng, cfg: EconomyConfig, demand: number): number {
+export function nextOfferGap(rng: Rng, cfg: GameConfig, demand: number): number {
   const base = cfg.offerIntervalMean / Math.max(0.05, demand);
   return rng.float(base * 0.4, base * 1.6);
 }

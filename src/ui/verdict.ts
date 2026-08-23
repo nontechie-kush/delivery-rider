@@ -1,4 +1,4 @@
-import type { EconomyConfig } from "../sim/economy.js";
+import type { GameConfig } from "../sim/config.js";
 import { rideMinutes, type ShiftState } from "../sim/shift.js";
 import type { Order } from "../sim/types.js";
 
@@ -11,13 +11,6 @@ export const VERDICT_LABEL: Record<Verdict, string> = {
   no: "Won't make it",
 };
 
-/**
- * Minutes lost per order already in the bag before this one gets served. Covers
- * the detour to its stop and the handover, so it is deliberately more than a
- * straight-line ride — under-counting this is what made everything read as
- * "Comfortable" in the first pass.
- */
-const QUEUE_COST = 17;
 
 export interface Estimate {
   verdict: Verdict;
@@ -43,21 +36,20 @@ export interface Estimate {
  * platform is optimistic, and orders from the places that under-report will
  * quietly read better here than they deserve to.
  */
-export function estimate(state: ShiftState, order: Order, cfg: EconomyConfig): Estimate {
+export function estimate(state: ShiftState, order: Order, cfg: GameConfig): Estimate {
   const toPickup = rideMinutes(state, state.locationId, order.pickupId);
   // Prep runs while the rider is on the way, so only the remainder is lost time.
   const waitClaimed = Math.max(0, order.shownPrep - toPickup);
   const toDrop = rideMinutes(state, order.pickupId, order.dropId);
-  const queue = state.carried.length * QUEUE_COST;
+  const queue = state.carried.length * cfg.queueCostPerOrder;
 
   const total = queue + toPickup + waitClaimed + toDrop;
   const window = cfg.tiers[order.tier].window;
   const ratio = total / window;
 
-  // Tightened from the first pass, where almost everything read "Comfortable"
-  // and the safe play carried no risk at all.
+  const b = cfg.verdictBands;
   const verdict: Verdict =
-    ratio < 0.45 ? "easy" : ratio < 0.7 ? "tight" : ratio < 0.92 ? "risky" : "no";
+    ratio < b.easy ? "easy" : ratio < b.tight ? "tight" : ratio < b.risky ? "risky" : "no";
 
   return { verdict, toPickup, waitClaimed, toDrop, queue, total, window };
 }

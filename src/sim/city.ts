@@ -41,68 +41,31 @@ interface Place {
   lon: number;
 }
 
-const PICKUP_PLACES: (Place & { prepMean: number; prepSpread: number; optimism: number })[] = [
-  // Dark store in the middle of the zone. Picks packaged goods off a shelf in
-  // three minutes and barely needs to lie about it — which is why EXPRESS exists.
-  {
-    id: "qk", name: "QuickKart", area: "Sushant Lok",
-    lat: 28.467, lon: 77.082, prepMean: 3, prepSpread: 1.5, optimism: 0.12,
-  },
-  // Sector 29 is Gurgaon's restaurant district. Biryani is cooked to order and
-  // the app shows you less than half the real wait.
-  {
-    id: "bj", name: "Biryani Junction", area: "Sector 29",
-    lat: 28.467, lon: 77.068, prepMean: 22, prepSpread: 8, optimism: 0.55,
-  },
-  {
-    id: "fc", name: "Filter Coffee Co", area: "Galleria, Phase 4",
-    lat: 28.4685, lon: 77.0855, prepMean: 8, prepSpread: 3, optimism: 0.2,
-  },
-  // Old Gurgaon, at the western edge of the zone. Someone has to walk a
-  // supermarket basket, and getting out there at all is a commitment.
-  {
-    id: "gm", name: "Green Mart", area: "Sector 14",
-    lat: 28.470, lon: 77.035, prepMean: 13, prepSpread: 5, optimism: 0.35,
-  },
+const PICKUP_PLACES: Place[] = [
+  { id: "qk", name: "QuickKart", area: "Sushant Lok", lat: 28.467, lon: 77.082 },
+  { id: "bj", name: "Biryani Junction", area: "Sector 29", lat: 28.467, lon: 77.068 },
+  { id: "fc", name: "Filter Coffee Co", area: "Galleria, Phase 4", lat: 28.4685, lon: 77.0855 },
+  { id: "gm", name: "Green Mart", area: "Sector 14", lat: 28.470, lon: 77.035 },
 ];
 
-/**
- * Handover minutes are the honest part nobody models: a metro-side handover to
- * someone standing on the pavement takes two minutes, a gated high-rise on Golf
- * Course Road takes seven by the time the guard, the lift and the floor are
- * done with you. Learning which is which is the Knowledge axis in miniature.
- */
-const DROP_PLACES: (Place & { handover: number })[] = [
-  { id: "d1", name: "Huda City Centre", area: "Sector 29", lat: 28.4595, lon: 77.0724, handover: 2 },
-  { id: "d2", name: "IFFCO Chowk", area: "Sector 17", lat: 28.472, lon: 77.072, handover: 2.5 },
-  { id: "d3", name: "Sikanderpur", area: "MG Road", lat: 28.4815, lon: 77.093, handover: 3 },
-  { id: "d4", name: "DLF Phase 3", area: "Sector 24", lat: 28.493, lon: 77.098, handover: 6 },
-  { id: "d5", name: "Sector 42", area: "Golf Course Rd", lat: 28.445, lon: 77.098, handover: 7 },
-  { id: "d6", name: "Sector 45", area: "South City", lat: 28.436, lon: 77.068, handover: 5 },
-  { id: "d7", name: "Sector 15", area: "Old Gurgaon", lat: 28.462, lon: 77.04, handover: 3.5 },
-  { id: "d8", name: "Sushant Lok C", area: "Block C", lat: 28.4585, lon: 77.0895, handover: 5.5 },
+const DROP_PLACES: Place[] = [
+  { id: "d1", name: "Huda City Centre", area: "Sector 29", lat: 28.4595, lon: 77.0724 },
+  { id: "d2", name: "IFFCO Chowk", area: "Sector 17", lat: 28.472, lon: 77.072 },
+  { id: "d3", name: "Sikanderpur", area: "MG Road", lat: 28.4815, lon: 77.093 },
+  { id: "d4", name: "DLF Phase 3", area: "Sector 24", lat: 28.493, lon: 77.098 },
+  { id: "d5", name: "Sector 42", area: "Golf Course Rd", lat: 28.445, lon: 77.098 },
+  { id: "d6", name: "Sector 45", area: "South City", lat: 28.436, lon: 77.068 },
+  { id: "d7", name: "Sector 15", area: "Old Gurgaon", lat: 28.462, lon: 77.04 },
+  { id: "d8", name: "Sushant Lok C", area: "Block C", lat: 28.4585, lon: 77.0895 },
 ];
 
+// Geography lives here; how each place behaves lives in config.ts.
 export const PICKUPS: readonly Pickup[] = PICKUP_PLACES.map((p) => ({
-  id: p.id,
-  name: p.name,
-  area: p.area,
-  kind: "PICKUP" as const,
-  // Collecting is quick once it is actually bagged; the wait is the prep, not this.
-  handover: 1.5,
-  ...project(p.lat, p.lon),
-  prepMean: p.prepMean,
-  prepSpread: p.prepSpread,
-  optimism: p.optimism,
+  id: p.id, name: p.name, area: p.area, kind: "PICKUP" as const, ...project(p.lat, p.lon),
 }));
 
 export const DROPS: readonly CityNode[] = DROP_PLACES.map((p) => ({
-  id: p.id,
-  name: p.name,
-  area: p.area,
-  kind: "DROP" as const,
-  handover: p.handover,
-  ...project(p.lat, p.lon),
+  id: p.id, name: p.name, area: p.area, kind: "DROP" as const, ...project(p.lat, p.lon),
 }));
 
 export const NODES: readonly CityNode[] = [...PICKUPS, ...DROPS];

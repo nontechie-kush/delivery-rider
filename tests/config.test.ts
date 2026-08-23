@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
-  DEFAULT_ECONOMY as E,
+  DEFAULT_CONFIG as E,
   milestoneBonus,
   nextMilestone,
   orderFee,
   paidFee,
-} from "../src/sim/economy.js";
+} from "../src/sim/config.js";
 
 describe("orderFee", () => {
   it("pays only the base inside the free distance", () => {

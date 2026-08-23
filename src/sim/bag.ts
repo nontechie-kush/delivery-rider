@@ -1,3 +1,4 @@
+import { DEFAULT_CONFIG } from "./config.js";
 import type { Slot, Temp } from "./types.js";
 
 /**
@@ -9,9 +10,7 @@ import type { Slot, Temp } from "./types.js";
  * Starting layout: two hot, one cold, two flexible. A run of hot orders cannot all
  * be taken, which is exactly when the player has to choose.
  */
-export const STARTING_SLOTS: readonly Slot["kind"][] = ["HOT", "HOT", "COLD", "ANY", "ANY"];
-
-export function makeBag(kinds: readonly Slot["kind"][] = STARTING_SLOTS): Slot[] {
+export function makeBag(kinds: readonly Slot["kind"][] = DEFAULT_CONFIG.bagSlots): Slot[] {
   return kinds.map((kind) => ({ kind, orderId: null }));
 }
 

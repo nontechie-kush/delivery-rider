@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { runMany, runShift } from "../src/sim/bot.js";
-import { DEFAULT_ECONOMY as E } from "../src/sim/economy.js";
+import { DEFAULT_CONFIG as E } from "../src/sim/config.js";
 
 const SHIFTS = 200;
 

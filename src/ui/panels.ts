@@ -1,5 +1,5 @@
 import { node } from "../sim/city.js";
-import { nextMilestone, type EconomyConfig } from "../sim/economy.js";
+import { nextMilestone, type GameConfig } from "../sim/config.js";
 import { canAccept, endShift, rideMinutes, type ShiftState } from "../sim/shift.js";
 import { esc, mins, rupees, urgency } from "./format.js";
 import { routeStack } from "./route.js";
@@ -19,17 +19,17 @@ const SLOT_NEED: Record<string, string> = {
   AMBIENT: "Any slot",
 };
 
-export function earningsBlock(state: ShiftState, cfg: EconomyConfig): string {
+export function earningsBlock(state: ShiftState, cfg: GameConfig): string {
   const earned = state.completed.reduce((s, c) => s + c.paid, 0);
-  const left = Math.max(0, cfg.shiftMinutes - state.clock);
-  const elapsed = (state.clock / cfg.shiftMinutes) * 100;
-  const hours = Math.ceil(cfg.shiftMinutes / 60);
+  const left = Math.max(0, cfg.dayMinutes - state.clock);
+  const elapsed = (state.clock / cfg.dayMinutes) * 100;
+  const hours = Math.ceil(cfg.dayMinutes / 60);
   const peak = Math.max(...cfg.demandByHour);
 
   // The day bar is also the demand curve, so the evening rush is visible before
   // it lands. Knowing what is coming is most of the skill this game teaches.
   const bars = Array.from({ length: hours }, (_, offset) => {
-    const demand = cfg.demandByHour[(cfg.startHour + offset) % 24] ?? 1;
+    const demand = cfg.demandByHour[(cfg.dayStartHour + offset) % 24] ?? 1;
     return `<i style="height:${Math.max(9, (demand / peak) * 100)}%"></i>`;
   }).join("");
 
@@ -48,7 +48,7 @@ export function earningsBlock(state: ShiftState, cfg: EconomyConfig): string {
     </div>`;
 }
 
-export function incentiveBlock(state: ShiftState, cfg: EconomyConfig): string {
+export function incentiveBlock(state: ShiftState, cfg: GameConfig): string {
   const done = state.completed.filter((c) => !c.late).length;
   const next = nextMilestone(done, cfg);
 
@@ -72,7 +72,7 @@ export function incentiveBlock(state: ShiftState, cfg: EconomyConfig): string {
     </div>`;
 }
 
-function offerCard(state: ShiftState, cfg: EconomyConfig, orderId: string): string {
+function offerCard(state: ShiftState, cfg: GameConfig, orderId: string): string {
   const order = state.offers.find((o) => o.id === orderId);
   if (!order) return "";
 
@@ -118,7 +118,7 @@ function offerCard(state: ShiftState, cfg: EconomyConfig, orderId: string): stri
     </article>`;
 }
 
-export function offersBlock(state: ShiftState, cfg: EconomyConfig): string {
+export function offersBlock(state: ShiftState, cfg: GameConfig): string {
   if (state.offers.length === 0) {
     return `<section class="block">
       <h2>New orders</h2>
