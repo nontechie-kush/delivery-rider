@@ -1,5 +1,5 @@
 import { node } from "../sim/city.js";
-import { nextMilestone, type GameConfig } from "../sim/config.js";
+import { hourAt, nextMilestone, type GameConfig } from "../sim/config.js";
 import { canAccept, endShift, rideMinutes, type ShiftState } from "../sim/shift.js";
 import { esc, mins, rupees, urgency } from "./format.js";
 import { routeStack } from "./route.js";
@@ -266,8 +266,8 @@ export function startScreen(
   const slots = cfg.slots
     .map(
       (s) => `
-      <label class="slotpick">
-        <input type="radio" name="slot" value="${esc(s.id)}" data-slot="${esc(s.id)}" />
+      <label class="slotpick" data-slot="${esc(s.id)}">
+        <input type="radio" name="slot" value="${esc(s.id)}" />
         <span class="slotbody">
           <b>${esc(s.label)}</b>
           <span class="slothours">${s.fromHour}:00–${s.toHour}:00</span>
@@ -302,8 +302,8 @@ export function startScreen(
       </p>
       <div class="slotpicks">
         ${slots}
-        <label class="slotpick">
-          <input type="radio" name="slot" value="" data-slot="" checked />
+        <label class="slotpick" data-slot="">
+          <input type="radio" name="slot" value="" checked />
           <span class="slotbody">
             <b>No commitment</b>
             <span class="slotterms">Work when you like. Reject what you like.
@@ -317,5 +317,46 @@ export function startScreen(
         <span class="golabel">Go on duty</span>
         <span class="gometa">Orders only arrive while you're online</span>
       </button>
+    </div>`;
+}
+
+/**
+ * The booked window, while it is live.
+ *
+ * A guarantee the player cannot see is a guarantee they will break by accident:
+ * every term is lost silently — one rejection too many, a few minutes off duty —
+ * and finding out at settlement is a bug report, not a mechanic. So this states
+ * what is at stake and what is left of it, the whole time it applies.
+ */
+export function commitmentBlock(state: ShiftState, cfg: GameConfig): string {
+  const c = state.duty.commitment;
+  if (!c) return "";
+
+  const slot = cfg.slots.find((s) => s.id === c.slotId);
+  if (!slot) return "";
+
+  const hour = hourAt(state.clock, cfg);
+  const before = hour < slot.fromHour;
+  const after = hour >= slot.toHour;
+  const broken = c.brokenReason !== null;
+  const rejectsLeft = slot.rejectionsAllowed - c.rejections;
+
+  const status = broken
+    ? `<span class="cmt-dead">Lost — ${esc(c.brokenReason ?? "")}</span>`
+    : before
+      ? `<span class="cmt-wait">Starts at ${slot.fromHour}:00</span>`
+      : after
+        ? `<span class="cmt-ok">Window closed</span>`
+        : `<span class="cmt-live">Live until ${slot.toHour}:00 · ${
+            rejectsLeft > 0 ? `${rejectsLeft} rejection left` : "no rejections left"
+          }</span>`;
+
+  return `
+    <div class="commitment ${broken ? "dead" : after ? "done" : before ? "waiting" : "live"}">
+      <div class="cmt-head">
+        <b>${esc(slot.label)}</b>
+        <span class="cmt-pay">${broken ? "₹0" : rupees(slot.guarantee)}</span>
+      </div>
+      <div class="cmt-status">${status}</div>
     </div>`;
 }

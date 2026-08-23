@@ -20,6 +20,7 @@ import { locateMessage, locateRider } from "./ui/locate.js";
 import {
   actionBlock,
   bagBlock,
+  commitmentBlock,
   earningsBlock,
   feedBlock,
   incentiveBlock,
@@ -68,8 +69,9 @@ async function findRider(): Promise<void> {
   if (outcome.kind === "located") startNodeId = outcome.nodeId;
   locateNote = locateMessage(outcome);
   locating = false;
-  if (phase === "start") void findRider();
-render();
+  // Only repaint if the player is still on the start screen — they may have
+  // gone on duty while the fix was still coming in.
+  if (phase === "start") render();
 }
 
 const earnedSoFar = (): number => state.completed.reduce((s, c) => s + c.paid, 0);
@@ -120,8 +122,7 @@ function beginDay(): void {
   startDuty(state);
   phase = "working";
   sheet = "half";
-  void findRider();
-render();
+  render();
 }
 
 function render(): void {
@@ -153,6 +154,7 @@ function render(): void {
       <button class="grabber" data-sheet="cycle" aria-label="Resize panel"><i></i></button>
       <div class="sheet-scroll">
         ${earningsBlock(state, cfg)}
+        ${commitmentBlock(state, cfg)}
         ${incentiveBlock(state, cfg)}
         ${feedBlock(state)}
         ${offersBlock(state, cfg)}
@@ -193,8 +195,7 @@ app.addEventListener("click", (event) => {
   if (d["sheet"]) {
     const index = SHEET_ORDER.indexOf(sheet);
     sheet = SHEET_ORDER[(index + 1) % SHEET_ORDER.length] ?? "half";
-    void findRider();
-render();
+    render();
     return;
   }
 
@@ -210,15 +211,13 @@ render();
     phase = "start";
     chosenSlot = "";
     preview = null;
-    void findRider();
-render();
+    render();
     return;
   } else return;
 
   preview = null;
   finishIfOver();
-  void findRider();
-render();
+  render();
 });
 
 /* Dragging the sheet. Delegated so it survives a re-render. */
@@ -248,8 +247,7 @@ app.addEventListener("pointerup", (event) => {
   const resolved = SHEET_ORDER[clamped];
   if (resolved && resolved !== sheet) {
     sheet = resolved;
-    void findRider();
-render();
+    render();
   }
 });
 
@@ -261,8 +259,7 @@ app.addEventListener("pointerover", (event) => {
   const id = target.closest<HTMLElement>("[data-preview]")?.dataset["preview"] ?? null;
   if (id !== preview) {
     preview = id;
-    void findRider();
-render();
+    render();
   }
 });
 
@@ -277,8 +274,7 @@ app.addEventListener("keydown", (event) => {
   travelTo(state, go);
   sheet = "peek";
   finishIfOver();
-  void findRider();
-render();
+  render();
 });
 
 void findRider();

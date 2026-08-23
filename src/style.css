@@ -537,3 +537,22 @@ h2 .slots { display: flex; gap: 3px; margin-left: 2px; }
   color: #062119; padding: 14px 16px; text-align: center; min-height: 56px;
 }
 .start .go:hover { background: #2af0af; }
+
+/* The booked window, stated the whole time it applies. A guarantee the player
+   cannot see is one they will break by accident. */
+.commitment {
+  margin: 12px 14px 0; background: var(--card);
+  border: 1px solid var(--line); border-left: 3px solid var(--brand);
+  border-radius: 4px; padding: 10px 13px;
+}
+.commitment.waiting { border-left-color: var(--dimmer); }
+.commitment.dead { border-left-color: var(--red); }
+.commitment.done { border-left-color: var(--line); }
+.cmt-head { display: flex; justify-content: space-between; align-items: baseline; }
+.cmt-head b { font-size: 14.5px; font-weight: 650; }
+.cmt-pay { font-size: 16px; font-weight: 750; color: var(--brand); font-variant-numeric: tabular-nums; }
+.commitment.dead .cmt-pay { color: var(--red); text-decoration: line-through; }
+.cmt-status { font-size: 11.5px; margin-top: 3px; }
+.cmt-live { color: var(--brand); }
+.cmt-wait, .cmt-ok { color: var(--dim); }
+.cmt-dead { color: var(--red); }
