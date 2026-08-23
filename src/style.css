@@ -36,11 +36,110 @@ html, body { margin: 0; background: var(--bg); }
 body {
   color: var(--text);
   font: 15px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  padding: 0 0 86px;
+  padding: 0;
   -webkit-font-smoothing: antialiased;
+  overflow: hidden;
 }
 
-#app { max-width: 460px; margin: 0 auto; min-height: 100vh; background: var(--bg); }
+/* Map underneath, sheet over it — the production rider-app shape. The app owns
+   the viewport; only the sheet's inner list scrolls. */
+#app {
+  max-width: 460px;
+  margin: 0 auto;
+  height: 100dvh;
+  background: var(--bg);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.maplayer {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 10px 10px 0;
+}
+.maplayer .map { width: 100%; max-height: 100%; }
+
+/* Floating status pill — duty state and earnings, always visible, never over
+   the part of the map that matters. */
+.bubble {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  background: rgba(10, 12, 11, 0.92);
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  padding: 7px 14px 7px 11px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  backdrop-filter: blur(6px);
+}
+.bubble .pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--brand); box-shadow: 0 0 0 3px rgba(0, 227, 155, 0.18); flex: none; }
+.bub-main { font-size: 17px; font-weight: 750; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.bub-sub { font-size: 11px; color: var(--dim); }
+.bub-sub b { font-weight: 700; }
+.bub-sub b.hot { color: var(--red); }
+.bub-sub b.warm { color: var(--amber); }
+.bub-sub b.cold { color: var(--dimmer); }
+
+.whereami {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  font-size: 11px;
+  color: var(--dim);
+  background: rgba(10, 12, 11, 0.92);
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  padding: 7px 12px;
+}
+
+/* Three snap states, as Delivery Hero's Dynamic Sheet does it: minimised for a
+   bigger map, half alongside it, or pulled up full for the work list. */
+.sheet {
+  flex: none;
+  background: var(--bg);
+  border-top: 1px solid var(--line);
+  border-radius: 16px 16px 0 0;
+  box-shadow: 0 -14px 34px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  transition: height 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+  min-height: 0;
+}
+.sheet.peek { height: 27vh; }
+.sheet.half { height: 58vh; }
+.sheet.full { height: calc(100dvh - 44px); }
+
+.grabber {
+  background: none;
+  border: 0;
+  padding: 9px 0 5px;
+  width: 100%;
+  cursor: grab;
+  display: flex;
+  justify-content: center;
+  touch-action: none;
+}
+.grabber i { display: block; width: 38px; height: 4px; border-radius: 2px; background: var(--line); }
+.grabber:hover i { background: var(--dimmer); }
+
+.sheet-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-bottom: 12px; }
+
+.sheet-action {
+  flex: none;
+  display: flex;
+  gap: 8px;
+  padding: 10px 14px calc(12px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--line);
+  background: var(--chrome);
+}
 
 h2 {
   font-size: 11px;
@@ -69,36 +168,22 @@ h2 .count {
 /* ------------------------------------------------------------ app chrome */
 
 .statusbar {
+  flex: none;
   background: var(--chrome);
-  padding: 10px 14px 9px;
+  padding: 11px 14px 10px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  border-bottom: 1px solid var(--line);
 }
 .brand { font-size: 15px; font-weight: 800; letter-spacing: 0.06em; color: var(--brand); }
 .brand em { font-style: normal; font-weight: 500; color: var(--dim); letter-spacing: 0.04em; font-size: 12px; }
 .sig { color: var(--dimmer); font-size: 11px; letter-spacing: 2px; }
 
-.duty {
-  background: var(--chrome);
-  border-bottom: 1px solid var(--line);
-  padding: 0 14px 11px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 12.5px;
-}
-.online { color: var(--brand); font-weight: 600; display: flex; align-items: center; gap: 6px; }
-.online i { width: 7px; height: 7px; border-radius: 50%; background: var(--brand); box-shadow: 0 0 0 3px rgba(0, 227, 155, 0.18); }
-.duty .time { color: var(--dim); font-variant-numeric: tabular-nums; }
-.duty .demand { margin-left: auto; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; font-size: 10.5px; color: var(--dim); }
-.duty .demand.hot { color: var(--red); }
-.duty .demand.warm { color: var(--amber); }
-.duty .demand.cold { color: var(--dimmer); }
 
 /* ------------------------------------------------------------- earnings */
 
-.earnings { background: var(--chrome); padding: 15px 14px 14px; }
+.earnings { padding: 4px 14px 14px; }
 .earnings .label { font-size: 10.5px; letter-spacing: 0.11em; text-transform: uppercase; color: var(--dimmer); font-weight: 600; }
 .earnings .amt {
   font-size: 40px;
@@ -149,69 +234,7 @@ h2 .count {
 
 /* ------------------------------------------------------------------ map */
 
-.mapblock { padding: 12px 14px 0; }
-.maptoggle {
-  width: 100%;
-  background: var(--card);
-  border: 1px solid var(--line);
-  color: var(--dim);
-  font: inherit;
-  font-size: 12px;
-  padding: 8px 12px;
-  text-align: left;
-  cursor: pointer;
-}
-.mapblock.open .maptoggle { border-bottom: 0; }
-.mapwrap { background: var(--card); border: 1px solid var(--line); border-top: 0; padding: 4px; }
-.map { display: block; width: 100%; height: auto; touch-action: manipulation; }
-
-.map .grid { stroke: #1a1f1c; stroke-width: 0.035; }
-.map .route { stroke-width: 0.09; stroke-dasharray: 0.3 0.25; opacity: 0.85; }
-.map .route.ok { stroke: var(--brand-deep); }
-.map .route.soon { stroke: var(--amber); }
-.map .route.late { stroke: var(--red); }
-.map .preview { stroke: var(--dim); stroke-width: 0.07; stroke-dasharray: 0.15 0.2; }
-.map .preview.solid { stroke: var(--text); stroke-width: 0.11; stroke-dasharray: none; }
-.map .node { cursor: pointer; }
-.map .hit { fill: transparent; }
-.map .pip { fill: #333a35; stroke: #454e48; stroke-width: 0.05; }
-.map .pickup .pip { fill: #2c3a44; stroke: #445866; }
-.map .name { font-size: 0.42px; fill: var(--dimmer); text-anchor: middle; font-family: inherit; pointer-events: none; }
-.map .count { font-size: 0.45px; font-weight: 700; fill: #0a0c0b; text-anchor: middle; pointer-events: none; }
-.map .pending .pip { fill: var(--brand); stroke: none; }
-.map .pending.soon .pip { fill: var(--amber); }
-.map .pending.late .pip { fill: var(--red); }
-.map .pending .name { fill: var(--text); }
-.map .here .pip { fill: none; stroke: var(--text); stroke-width: 0.16; }
-.map .here .name { fill: var(--text); font-weight: 700; }
-.map .preview-pickup .pip { fill: var(--text); stroke: none; }
-.map .preview-drop .pip { fill: none; stroke: var(--text); stroke-width: 0.13; }
-.map .node:hover .pip { stroke: var(--text); stroke-width: 0.09; }
-.map .node:focus-visible { outline: none; }
-.map .node:focus-visible .pip { stroke: var(--brand); stroke-width: 0.14; }
-
-/* ----------------------------------------------------------------- feed */
-
-.feed { padding: 12px 14px 0; font-size: 12.5px; }
-.feed div { color: var(--dimmer); padding: 3px 0; }
-.feed .newest { color: var(--dim); }
-.feed .flag { color: var(--amber); }
-
-/* --------------------------------------------------------- route stack */
-
-/* The stacked pickup-to-drop with a dashed connector. Every rider app has
-   this; it answers where-first and where-after in one glance. */
-.route { position: relative; padding-left: 22px; }
-.route::before {
-  content: "";
-  position: absolute;
-  left: 4px;
-  top: 15px;
-  bottom: 15px;
-  width: 0;
-  border-left: 2px dotted var(--line);
-}
-.stop { position: relative; padding: 5px 0; }
+.mapblock.open .stop { position: relative; padding: 5px 0; }
 .stop .pin {
   position: absolute;
   left: -22px;
@@ -390,3 +413,31 @@ h2 .slots { display: flex; gap: 3px; margin-left: 2px; }
 .summary .go:hover { background: #2af0af; }
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+
+/* ---------------------------------------------------------- action + misc */
+
+.endshift { padding: 18px 14px 8px; }
+.endshift button {
+  background: transparent; border: 1px solid var(--line); color: var(--dimmer);
+  font-size: 13px; padding: 11px 14px; width: 100%;
+}
+.endshift button:hover { color: var(--red); border-color: #4a2620; }
+
+.sheet-action .go {
+  flex: 1; background: var(--brand); border: 0; color: #062119;
+  padding: 12px 16px; text-align: left; min-height: 56px;
+}
+.sheet-action .go:hover { background: #2af0af; }
+.golabel { display: block; font-size: 15.5px; font-weight: 750; letter-spacing: -0.01em; }
+.gometa { display: block; font-size: 11.5px; font-weight: 500; opacity: 0.72; margin-top: 1px; }
+.sheet-action .wait {
+  background: var(--card-2); border: 1px solid var(--line); color: var(--dim);
+  padding: 12px 16px; font-size: 13.5px; min-height: 56px;
+}
+.sheet-action .wait.wide { flex: 1; text-align: center; }
+.sheet-action .wait:hover { color: var(--text); }
+
+.summary .go { display: block; width: 100%; background: var(--brand); border: 0; color: #062119; padding: 15px; text-align: center; }
+.summary .go:hover { background: #2af0af; }
+.summary { overflow-y: auto; flex: 1; }
