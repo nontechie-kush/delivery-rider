@@ -66,8 +66,18 @@ h2 .cap { letter-spacing: 0; text-transform: none; font-weight: 400; }
 .cash { text-align: right; }
 .cash b { color: var(--green); }
 
-.daybar { grid-column: 1 / -1; height: 3px; background: var(--line); margin-top: 6px; }
-.daybar i { display: block; height: 100%; background: var(--dim); }
+/* Day bar doubles as the demand curve — one tick per hour, tall where the
+   orders are, with a marker for now. Rules live here only; do not re-declare. */
+.daybar {
+  grid-column: 1 / -1;
+  position: relative;
+  height: 24px;
+  background: #0d100c;
+  border: 1px solid var(--line);
+  margin-top: 8px;
+}
+.daybar .peak { position: absolute; bottom: 0; background: var(--line); }
+.daybar .now { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--green); }
 
 /* ---------------------------------------------------------------- milestone */
 
@@ -270,3 +280,10 @@ button.quiet { color: var(--dim); background: transparent; }
 .flag { color: var(--amber); display: block; margin-top: 3px; }
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+.busy { font-weight: 600; }
+.busy.hot { color: var(--red); }
+.busy.warm { color: var(--amber); }
+.busy.cold { color: var(--muted); }
+
+.dimmer { color: var(--muted); font-size: 12px; }

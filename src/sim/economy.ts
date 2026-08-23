@@ -25,6 +25,12 @@ export interface TierConfig {
 
 export interface EconomyConfig {
   shiftMinutes: number;
+  /** Clock hour the shift begins. Everything else is measured from here. */
+  startHour: number;
+  /** Multiplier on order arrival rate, indexed by hour of day (0–23). */
+  demandByHour: readonly number[];
+  /** Multiplier on travel time, indexed by hour of day (0–23). */
+  trafficByHour: readonly number[];
   tiers: Record<Tier, TierConfig>;
   /** Cumulative: hitting 20 pays the 12-bonus and the 20-bonus. */
   milestones: readonly { orders: number; bonus: number }[];
@@ -34,12 +40,48 @@ export interface EconomyConfig {
   offerLifetime: number;
   /** Mean game-minutes between new offers appearing. */
   offerIntervalMean: number;
-  /** Fixed cost deducted at end of shift — fuel, data, wear. */
+  /** Fixed cost deducted at end of shift — phone data, the daily bag rental. */
   shiftExpenses: number;
+  /** Fuel, servicing and wear, charged per grid unit actually ridden. */
+  expensePerUnit: number;
 }
 
+/**
+ * Noon to eleven. The shift has to straddle both peaks or the demand curve does
+ * no work: the lunch crush, the dead afternoon where the decision is whether to
+ * rest or reposition, and the evening block that decides the milestone.
+ */
+const SHIFT_START_HOUR = 12;
+
+/**
+ * Real order volume is nothing like flat. Platform data puts the lunch peak at
+ * about 4.4x the daily average and the evening peak at 2.33x — lower, but longer,
+ * and the block that carries the highest incentives. Indian windows sit later
+ * than Western ones: lunch 12–3, dinner 7–11.
+ */
+const DEMAND_BY_HOUR: readonly number[] = [
+  //  0    1    2    3    4    5    6    7    8    9   10   11
+  0.15, 0.1, 0.08, 0.06, 0.06, 0.1, 0.3, 0.5, 0.8, 1.0, 1.4, 2.6,
+  // 12   13   14   15   16   17   18   19   20   21   22   23
+  3.6, 4.4, 3.1, 1.6, 0.9, 0.7, 1.0, 2.0, 2.4, 2.3, 1.5, 0.7,
+];
+
+/**
+ * Congestion tracks demand, which is the cruel part: the hours worth working are
+ * the hours you cannot move through. Bengaluru measures 15 minutes to cover
+ * 4.2 km at peak — roughly 3.6 min/km against a 3.1 all-day average.
+ */
+const TRAFFIC_BY_HOUR: readonly number[] = [
+  0.8, 0.8, 0.8, 0.8, 0.8, 0.85, 0.95, 1.15, 1.3, 1.15, 1.0, 1.1,
+  1.25, 1.3, 1.15, 1.0, 1.05, 1.2, 1.35, 1.35, 1.25, 1.1, 0.9, 0.85,
+];
+
 export const DEFAULT_ECONOMY: EconomyConfig = {
-  shiftMinutes: 420,
+  // Eleven hours, noon to 23:00. Long, but real full-timers average 62-hour weeks.
+  shiftMinutes: 660,
+  startHour: SHIFT_START_HOUR,
+  demandByHour: DEMAND_BY_HOUR,
+  trafficByHour: TRAFFIC_BY_HOUR,
 
   tiers: {
     // Pays roughly double per minute, with a quarter of the slack.
@@ -64,9 +106,32 @@ export const DEFAULT_ECONOMY: EconomyConfig = {
 
   latePayFactor: 0.5,
   offerLifetime: 12,
-  offerIntervalMean: 7,
-  shiftExpenses: 120,
+  // Gap at demand 1.0. The curve divides this, so the lunch peak runs ~4x faster.
+  // Swept in tools/sweep.ts: 19 puts a good rider at ~27 orders and ~₹86/hour
+  // against a measured ₹75, and leaves the 28-order bonus at roughly a third of
+  // shifts — a stretch rather than a formality.
+  offerIntervalMean: 19,
+  // Measured expenses are 32% of gross, and almost all of it is distance. A flat
+  // charge made the vehicle choice meaningless; per-unit is what gives the cycle
+  // its zero-fuel advantage and the petrol bike its bleed.
+  shiftExpenses: 60,
+  expensePerUnit: 2.5,
 };
+
+/** Clock hour (0–23) at a given point in the shift. */
+export function hourAt(minutes: number, cfg: EconomyConfig): number {
+  return Math.floor(cfg.startHour + minutes / 60) % 24;
+}
+
+/** How busy the platform is right now, as a multiplier on the arrival rate. */
+export function demandAt(minutes: number, cfg: EconomyConfig): number {
+  return cfg.demandByHour[hourAt(minutes, cfg)] ?? 1;
+}
+
+/** How slow the roads are right now, as a multiplier on travel time. */
+export function trafficAt(minutes: number, cfg: EconomyConfig): number {
+  return cfg.trafficByHour[hourAt(minutes, cfg)] ?? 1;
+}
 
 /** Base + distance pay for one order, before lateness is applied. */
 export function orderFee(tier: Tier, distance: number, cfg: EconomyConfig): number {

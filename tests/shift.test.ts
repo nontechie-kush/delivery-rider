@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { used } from "../src/sim/bag.js";
-import { travelMinutes } from "../src/sim/city.js";
+import { distance, travelMinutes } from "../src/sim/city.js";
 import { DEFAULT_ECONOMY as E } from "../src/sim/economy.js";
 import {
   accept,
@@ -10,6 +10,7 @@ import {
   idle,
   isOver,
   reject,
+  rideMinutes,
   travelTo,
 } from "../src/sim/shift.js";
 
@@ -83,10 +84,20 @@ describe("accept and reject", () => {
 describe("travel", () => {
   it("advances the clock by the travel time", () => {
     const s = createShift(2);
-    const expected = travelMinutes("qk", "d4");
+    // Rides are quoted through rideMinutes now, which scales the base travel
+    // time by the current hour's congestion.
+    const expected = rideMinutes(s, "qk", "d4");
+    expect(expected).toBeGreaterThan(travelMinutes("qk", "d4"));
     travelTo(s, "d4");
     expect(s.clock).toBeCloseTo(expected, 6);
     expect(s.locationId).toBe("d4");
+  });
+
+  it("charges expenses against the distance actually ridden", () => {
+    const s = createShift(2);
+    expect(s.unitsRidden).toBe(0);
+    travelTo(s, "d4");
+    expect(s.unitsRidden).toBeCloseTo(distance("qk", "d4"), 6);
   });
 
   it("costs nothing to stay where you are", () => {
@@ -175,7 +186,11 @@ describe("endShift", () => {
     const sum = endShift(s);
     expect(sum.ordersDelivered).toBe(1);
     expect(sum.milestones).toBe(0);
-    expect(sum.expenses).toBe(E.shiftExpenses);
+    // Fixed daily cost plus fuel and wear over the distance actually covered.
+    expect(sum.expenses).toBe(
+      Math.round(E.shiftExpenses + sum.unitsRidden * E.expensePerUnit),
+    );
+    expect(sum.expenses).toBeGreaterThan(E.shiftExpenses);
     expect(sum.net).toBe(sum.fees + sum.milestones - sum.expenses);
   });
 

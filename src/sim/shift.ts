@@ -1,9 +1,12 @@
 import { load, makeBag, fits, unload } from "./bag.js";
-import { START_NODE_ID, node, travelMinutes } from "./city.js";
+import { BIKE_MIN_PER_UNIT, START_NODE_ID, distance, node, travelMinutes } from "./city.js";
 import {
   DEFAULT_ECONOMY,
+  demandAt,
+  hourAt,
   milestoneBonus,
   paidFee,
+  trafficAt,
   type EconomyConfig,
 } from "./economy.js";
 import { generateOrder, nextOfferGap } from "./orders.js";
@@ -37,6 +40,8 @@ export interface ShiftState {
   dropped: Order[];
   seq: number;
   nextOfferAt: number;
+  /** Grid units ridden this shift. Expenses are charged against this. */
+  unitsRidden: number;
   log: string[];
 }
 
@@ -54,6 +59,8 @@ export interface ShiftSummary {
   /** How much of that waiting the app never showed. */
   minutesWaitingHidden: number;
   undelivered: number;
+  /** Grid units ridden, roughly 0.7 km each. */
+  unitsRidden: number;
 }
 
 export function createShift(seed: number, cfg: EconomyConfig = DEFAULT_ECONOMY): ShiftState {
@@ -70,6 +77,7 @@ export function createShift(seed: number, cfg: EconomyConfig = DEFAULT_ECONOMY):
     dropped: [],
     seq: 0,
     nextOfferAt: 0,
+    unitsRidden: 0,
     log: [],
   };
   refreshOffers(state);
@@ -85,7 +93,11 @@ function refreshOffers(state: ShiftState): void {
   while (state.nextOfferAt <= state.clock && state.nextOfferAt < state.cfg.shiftMinutes) {
     state.seq += 1;
     state.offers.push(generateOrder(state.rng, state.nextOfferAt, state.seq, state.cfg));
-    state.nextOfferAt += nextOfferGap(state.rng, state.cfg);
+    state.nextOfferAt += nextOfferGap(
+      state.rng,
+      state.cfg,
+      demandAt(state.nextOfferAt, state.cfg),
+    );
   }
   state.offers = state.offers.filter((o) => o.expiresAt > state.clock);
 }
@@ -142,11 +154,33 @@ export function travelTo(state: ShiftState, destId: string): void {
     return;
   }
 
-  const minutes = travelMinutes(state.locationId, destId);
+  const minutes = rideMinutes(state, state.locationId, destId);
+  state.unitsRidden += distance(state.locationId, destId);
   advance(state, minutes);
   state.locationId = destId;
   state.log.push(`Rode to ${node(destId).name}, ${minutes.toFixed(0)} min.`);
   collectAndDeliver(state);
+}
+
+/**
+ * Travel time between two nodes at the current hour's congestion.
+ *
+ * Everything that quotes a ride — the UI, the bot, the offer forecast — must go
+ * through this rather than calling travelMinutes directly, or the estimate stops
+ * matching what the ride actually costs during the evening block.
+ */
+export function rideMinutes(state: ShiftState, fromId: string, toId: string): number {
+  return travelMinutes(fromId, toId, BIKE_MIN_PER_UNIT * trafficAt(state.clock, state.cfg));
+}
+
+/** Current clock hour, for anything that needs to show the player the time of day. */
+export function hourNow(state: ShiftState): number {
+  return hourAt(state.clock, state.cfg);
+}
+
+/** How busy the platform is right now, for the UI's "it's quiet / it's slammed" read. */
+export function demandNow(state: ShiftState): number {
+  return demandAt(state.clock, state.cfg);
 }
 
 function collectAndDeliver(state: ShiftState): void {
@@ -224,6 +258,11 @@ export function endShift(state: ShiftState): ShiftSummary {
   const fees = state.completed.reduce((sum, c) => sum + c.paid, 0);
   const onTime = state.completed.filter((c) => !c.late).length;
   const milestones = milestoneBonus(onTime, state.cfg);
+  // Measured at 32% of gross, and nearly all of it is distance. Charging it per
+  // unit ridden is what will make the cycle-versus-petrol choice mean something.
+  const expenses = Math.round(
+    state.cfg.shiftExpenses + state.unitsRidden * state.cfg.expensePerUnit,
+  );
   const minutesWaiting = state.completed.reduce((sum, c) => sum + c.waited, 0);
   const minutesWaitingHidden = state.completed.reduce(
     (sum, c) => sum + Math.max(0, c.waited - c.waitShown),
@@ -236,17 +275,18 @@ export function endShift(state: ShiftState): ShiftSummary {
     ordersLate: state.completed.length - onTime,
     fees,
     milestones,
-    expenses: state.cfg.shiftExpenses,
-    net: fees + milestones - state.cfg.shiftExpenses,
+    expenses,
+    net: fees + milestones - expenses,
     minutesWaiting,
     minutesWaitingHidden,
     undelivered: state.dropped.length,
+    unitsRidden: state.unitsRidden,
   };
 }
 
-/** Game-minutes as a shift clock starting at 10:00. */
-export function fmt(minutes: number): string {
-  const total = 600 + Math.floor(minutes);
+/** Game-minutes as a wall clock, offset from the shift's start hour. */
+export function fmt(minutes: number, cfg: EconomyConfig = DEFAULT_ECONOMY): string {
+  const total = cfg.startHour * 60 + Math.floor(minutes);
   const h = Math.floor(total / 60) % 24;
   const m = total % 60;
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;

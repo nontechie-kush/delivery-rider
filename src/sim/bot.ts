@@ -1,10 +1,10 @@
-import { travelMinutes } from "./city.js";
 import type { EconomyConfig } from "./economy.js";
 import {
   accept,
   createShift,
   endShift,
   isOver,
+  rideMinutes,
   travelTo,
   idle,
   type ShiftSummary,
@@ -63,7 +63,7 @@ function chooseStop(state: ShiftState): Stop | null {
   let bestCost = Infinity;
 
   for (const stop of options) {
-    const travel = travelMinutes(state.locationId, stop.nodeId);
+    const travel = rideMinutes(state, state.locationId, stop.nodeId);
     const slack = stop.due - state.clock;
     // Urgency discount: a stop about to go late is worth riding further for.
     const cost = travel - Math.max(0, 60 - slack) * 0.5 - stop.serves * 2;
@@ -86,8 +86,8 @@ function chooseStop(state: ShiftState): Stop | null {
  */
 function worthTaking(state: ShiftState, offer: Order, cfg: EconomyConfig): boolean {
   const queueAhead = state.carried.length * AVG_LEG_MINUTES;
-  const toPickup = travelMinutes(state.locationId, offer.pickupId);
-  const toDrop = travelMinutes(offer.pickupId, offer.dropId);
+  const toPickup = rideMinutes(state, state.locationId, offer.pickupId);
+  const toDrop = rideMinutes(state, offer.pickupId, offer.dropId);
   const forecast = queueAhead + toPickup + offer.shownPrep + toDrop;
 
   return forecast < cfg.tiers[offer.tier].window * 0.85;

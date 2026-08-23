@@ -73,7 +73,14 @@ export function generateOrder(
   };
 }
 
-/** Game-minutes until the next offer appears. */
-export function nextOfferGap(rng: Rng, cfg: EconomyConfig): number {
-  return rng.float(cfg.offerIntervalMean * 0.4, cfg.offerIntervalMean * 1.6);
+/**
+ * Game-minutes until the next offer appears.
+ *
+ * `demand` is the hour's multiplier on arrival rate, so a lunch peak of 4.4
+ * divides the gap to roughly a quarter and the 5pm trough stretches it out.
+ * Floored so a dead hour still trickles rather than stopping dead.
+ */
+export function nextOfferGap(rng: Rng, cfg: EconomyConfig, demand: number): number {
+  const base = cfg.offerIntervalMean / Math.max(0.05, demand);
+  return rng.float(base * 0.4, base * 1.6);
 }

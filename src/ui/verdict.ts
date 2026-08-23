@@ -1,6 +1,5 @@
-import { travelMinutes } from "../sim/city.js";
 import type { EconomyConfig } from "../sim/economy.js";
-import type { ShiftState } from "../sim/shift.js";
+import { rideMinutes, type ShiftState } from "../sim/shift.js";
 import type { Order } from "../sim/types.js";
 
 export type Verdict = "easy" | "tight" | "risky" | "no";
@@ -45,10 +44,10 @@ export interface Estimate {
  * quietly read better here than they deserve to.
  */
 export function estimate(state: ShiftState, order: Order, cfg: EconomyConfig): Estimate {
-  const toPickup = travelMinutes(state.locationId, order.pickupId);
+  const toPickup = rideMinutes(state, state.locationId, order.pickupId);
   // Prep runs while the rider is on the way, so only the remainder is lost time.
   const waitClaimed = Math.max(0, order.shownPrep - toPickup);
-  const toDrop = travelMinutes(order.pickupId, order.dropId);
+  const toDrop = rideMinutes(state, order.pickupId, order.dropId);
   const queue = state.carried.length * QUEUE_COST;
 
   const total = queue + toPickup + waitClaimed + toDrop;

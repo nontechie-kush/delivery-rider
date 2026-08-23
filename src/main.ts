@@ -1,5 +1,5 @@
 import "./style.css";
-import { node, travelMinutes } from "./sim/city.js";
+import { node } from "./sim/city.js";
 import { DEFAULT_ECONOMY, nextMilestone } from "./sim/economy.js";
 import {
   accept,
@@ -8,8 +8,10 @@ import {
   endShift,
   fmt,
   idle,
+  demandNow,
   isOver,
   reject,
+  rideMinutes,
   travelTo,
   type ShiftState,
 } from "./sim/shift.js";
@@ -30,23 +32,52 @@ const earned = (): number => state.completed.reduce((s, c) => s + c.paid, 0);
 
 /* ---------------------------------------------------------------- top bar */
 
+/**
+ * How the hour reads to a rider. Order volume swings about six-fold across a
+ * shift, and knowing that the 8pm block is worth three of the 4pm ones is the
+ * single most valuable thing a veteran knows — so the game says it out loud
+ * rather than making the player infer it from an offer queue.
+ */
+function busyness(demand: number): { word: string; cls: string } {
+  if (demand >= 3) return { word: "Slammed", cls: "hot" };
+  if (demand >= 1.8) return { word: "Busy", cls: "warm" };
+  if (demand >= 0.9) return { word: "Ticking over", cls: "" };
+  return { word: "Dead", cls: "cold" };
+}
+
 function topBar(): string {
   const left = Math.max(0, cfg.shiftMinutes - state.clock);
   const elapsed = (state.clock / cfg.shiftMinutes) * 100;
+  const busy = busyness(demandNow(state));
+
+  // The day bar doubles as the demand curve: one tick per hour of the shift,
+  // tall where the orders are. The player can see the evening block coming.
+  const hoursInShift = Math.ceil(cfg.shiftMinutes / 60);
+  const peakDemand = Math.max(...cfg.demandByHour);
+  const marks = Array.from({ length: hoursInShift }, (_, offset) => {
+    const demand = cfg.demandByHour[(cfg.startHour + offset) % 24] ?? 1;
+    const pos = (offset / hoursInShift) * 100;
+    const height = Math.max(8, (demand / peakDemand) * 100);
+    return `<i class="peak" style="left:${pos}%;width:${100 / hoursInShift}%;height:${height}%"></i>`;
+  }).join("");
 
   return `
     <header class="top">
       <div class="clock">
-        <b>${fmt(state.clock)}</b>
-        <span>${mins(left)} of shift left</span>
+        <b>${fmt(state.clock, cfg)}</b>
+        <span class="busy ${busy.cls}">${busy.word}</span>
       </div>
       <div class="cash">
         <b>${rupees(earned())}</b>
-        <span>earned so far</span>
+        <span>${mins(left)} of shift left</span>
       </div>
-      <div class="daybar" aria-hidden="true"><i style="width:${Math.min(100, elapsed)}%"></i></div>
+      <div class="daybar" aria-hidden="true">
+        ${marks}
+        <i class="now" style="left:${Math.min(100, elapsed)}%"></i>
+      </div>
     </header>`;
 }
+
 
 /* ------------------------------------------------------------- milestone */
 
@@ -212,7 +243,7 @@ function moveSection(): string {
       return `
         <button class="primary" data-go="${esc(id)}">
           Ride to ${esc(node(id).name)}
-          <em>${mins(travelMinutes(state.locationId, id))}${serves > 1 ? ` · ${serves} orders here` : ""} · ${
+          <em>${mins(rideMinutes(state, state.locationId, id))}${serves > 1 ? ` · ${serves} orders here` : ""} · ${
             slack < 0 ? "already late" : `${mins(slack)} to spare`
           }</em>
         </button>`;
@@ -265,12 +296,13 @@ function summary(): string {
             <td>${rupees(s.fees)}</td></tr>
         <tr><td>Bonus for ${s.ordersOnTime} on time</td>
             <td>${s.milestones > 0 ? rupees(s.milestones) : "—"}</td></tr>
-        <tr class="cost"><td>Fuel, data, wear</td><td>−${rupees(s.expenses)}</td></tr>
+        <tr class="cost"><td>Fuel, data, wear <span class="dimmer">${(s.unitsRidden * 0.7).toFixed(0)} km</span></td><td>−${rupees(s.expenses)}</td></tr>
         <tr class="total"><td>Take home</td><td>${rupees(s.net)}</td></tr>
       </table>
 
       <p class="waited">
-        You spent <b>${mins(s.minutesWaiting)}</b> standing at pickups.
+        You rode <b>${(s.unitsRidden * 0.7).toFixed(0)} km</b> and spent
+        <b>${mins(s.minutesWaiting)}</b> standing at pickups.
         ${hidden > 1 ? `<span class="flag">${mins(hidden)} of that the app never showed you.</span>` : ""}
         ${s.undelivered > 0 ? `<span class="flag">${s.undelivered} order(s) never made it out of your bag.</span>` : ""}
       </p>
