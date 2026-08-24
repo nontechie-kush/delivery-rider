@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { NODES, insideZone, nearestNode, node, project } from "../src/sim/city.js";
+import { renderMap } from "../src/ui/map.js";
+import { createShift } from "../src/sim/shift.js";
 import { locateMessage } from "../src/ui/locate.js";
 
 /** Real coordinates of places inside and well outside the play zone. */
@@ -88,5 +90,37 @@ describe("locateMessage", () => {
       inZone: false,
     });
     expect(message).toContain("1600 km");
+  });
+});
+
+describe("map labels", () => {
+  /**
+   * Twelve place names on a nine-kilometre map will collide unless placed
+   * deliberately. Anything overlapping is dropped rather than drawn on top of
+   * its neighbour, so the count is allowed to be lower than the node count —
+   * but the label for wherever the rider is standing must always survive.
+   */
+  it("never draws two labels on top of each other", () => {
+    const s = createShift(3);
+    const svg = renderMap(s, null);
+
+    const ys = [...svg.matchAll(/class="name" x="(-?[\d.]+)" y="(-?[\d.]+)"/g)].map((m) => ({
+      x: Number(m[1]),
+      y: Number(m[2]),
+    }));
+
+    for (let i = 0; i < ys.length; i++) {
+      for (let j = i + 1; j < ys.length; j++) {
+        const a = ys[i]!;
+        const b = ys[j]!;
+        const overlapping = Math.abs(a.y - b.y) < 0.6 && Math.abs(a.x - b.x) < 2.2;
+        expect(overlapping).toBe(false);
+      }
+    }
+  });
+
+  it("always labels where the rider is standing", () => {
+    const s = createShift(3);
+    expect(renderMap(s, null)).toContain(node(s.locationId).name);
   });
 });

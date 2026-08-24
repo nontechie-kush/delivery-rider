@@ -145,6 +145,15 @@ export function accrue(duty: DutyState, clock: number, cfg: GameConfig): void {
   duty.onlineSince = clock;
 }
 
+/**
+ * Minutes on duty as of `clock`, including the stretch currently in progress.
+ * Pure: unlike `accrue`, reading this never advances anything.
+ */
+export function minutesOnlineAt(duty: DutyState, clock: number): number {
+  if (!duty.online || duty.onlineSince === null) return duty.minutesOnline;
+  return duty.minutesOnline + Math.max(0, clock - duty.onlineSince);
+}
+
 /* ------------------------------------------------------------- offer flow */
 
 export function recordAccept(duty: DutyState): void {

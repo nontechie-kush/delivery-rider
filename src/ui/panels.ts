@@ -1,7 +1,8 @@
 import { node } from "../sim/city.js";
 import { hourAt, nextMilestone, type GameConfig } from "../sim/config.js";
+import { minutesOnlineAt } from "../sim/duty.js";
 import { canAccept, endShift, rideMinutes, type ShiftState } from "../sim/shift.js";
-import { esc, mins, rupees, urgency } from "./format.js";
+import { duration, esc, mins, rupees, urgency } from "./format.js";
 import { routeStack } from "./route.js";
 import { estimate, VERDICT_LABEL } from "./verdict.js";
 
@@ -21,7 +22,7 @@ const SLOT_NEED: Record<string, string> = {
 
 export function earningsBlock(state: ShiftState, cfg: GameConfig): string {
   const earned = state.completed.reduce((s, c) => s + c.paid, 0);
-  const left = Math.max(0, cfg.dayMinutes - state.clock);
+  const online = minutesOnlineAt(state.duty, state.clock);
   const elapsed = (state.clock / cfg.dayMinutes) * 100;
   const hours = Math.ceil(cfg.dayMinutes / 60);
   const peak = Math.max(...cfg.demandByHour);
@@ -33,14 +34,24 @@ export function earningsBlock(state: ShiftState, cfg: GameConfig): string {
     return `<i style="height:${Math.max(9, (demand / peak) * 100)}%"></i>`;
   }).join("");
 
+  // Earnings and time on duty are the two numbers a rider watches, so they get
+  // equal weight. Hours online is what every other figure here is per-unit of.
   return `
     <div class="earnings">
-      <span class="label">Today's earnings</span>
-      <div class="amt">${rupees(earned)}</div>
+      <div class="etop">
+        <div>
+          <span class="label">Today's earnings</span>
+          <div class="amt">${rupees(earned)}</div>
+        </div>
+        <div class="ontime">
+          <span class="label">On duty</span>
+          <div class="amt small">${duration(online)}</div>
+        </div>
+      </div>
       <div class="subline">
         <span>${state.completed.length} delivered</span>
         <span>${km(state.unitsRidden)}</span>
-        <span>${mins(left)} left</span>
+        <span>${online > 20 ? `${rupees((earned / online) * 60)}/hr` : "—"}</span>
       </div>
       <div class="daycurve" aria-hidden="true">
         ${bars}<span class="nowline" style="left:${Math.min(100, elapsed)}%"></span>
@@ -238,6 +249,8 @@ export function summaryScreen(state: ShiftState): string {
       </table>
 
       <p class="waited">
+        <b>${duration(s.minutesOnline)}</b> on duty
+        ${s.minutesOnline > 20 ? `· <b>${rupees((s.net / s.minutesOnline) * 60)}/hr</b> after costs` : ""}<br>
         Stood waiting <b>${mins(s.minutesWaiting)}</b> at pickups.
         ${
           s.minutesWaitingHidden > 1

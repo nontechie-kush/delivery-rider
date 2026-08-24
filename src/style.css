@@ -67,24 +67,24 @@ body {
 
 /* Map of Gurgaon. Stroke widths are in kilometres because the SVG is drawn in
    projected km, so everything scales with the viewBox rather than the screen. */
-.map .road { fill: none; stroke: #1e2521; stroke-width: 0.34; stroke-linecap: round; stroke-linejoin: round; }
-.map .road.major { stroke: #27302a; stroke-width: 0.5; }
+.map .road { fill: none; stroke: #232b26; stroke-width: 0.13; stroke-linecap: round; stroke-linejoin: round; }
+.map .road.major { stroke: #2e3830; stroke-width: 0.22; }
 
-.map .leg { stroke-width: 0.13; stroke-dasharray: 0.4 0.32; opacity: 0.9; }
+.map .leg { stroke-width: 0.08; stroke-dasharray: 0.26 0.22; opacity: 0.9; }
 .map .leg.ok { stroke: var(--brand-deep); }
 .map .leg.soon { stroke: var(--amber); }
 .map .leg.late { stroke: var(--red); }
 
-.map .preview { stroke: var(--dim); stroke-width: 0.1; stroke-dasharray: 0.22 0.26; }
-.map .preview.solid { stroke: var(--text); stroke-width: 0.15; stroke-dasharray: none; }
+.map .preview { stroke: var(--dim); stroke-width: 0.07; stroke-dasharray: 0.16 0.18; }
+.map .preview.solid { stroke: var(--text); stroke-width: 0.1; stroke-dasharray: none; }
 
 .map .node { cursor: pointer; }
 .map .hit { fill: transparent; }
-.map .pip { fill: #39433c; stroke: #4c574f; stroke-width: 0.07; }
+.map .pip { fill: #39433c; stroke: #4c574f; stroke-width: 0.05; }
 .map .pickup .pip { fill: #2f3f4a; stroke: #47606f; }
 
 .map .name {
-  font-size: 0.52px;
+  font-size: 0.34px;
   font-weight: 600;
   fill: var(--dimmer);
   text-anchor: middle;
@@ -92,10 +92,10 @@ body {
   pointer-events: none;
   paint-order: stroke;
   stroke: rgba(10, 12, 11, 0.85);
-  stroke-width: 0.18px;
+  stroke-width: 0.14px;
 }
 .map .badge {
-  font-size: 0.5px;
+  font-size: 0.32px;
   font-weight: 800;
   fill: #0a0c0b;
   text-anchor: middle;
@@ -107,15 +107,15 @@ body {
 .map .pending.late .pip { fill: var(--red); }
 .map .pending .name { fill: var(--text); }
 
-.map .here .pip { fill: #0a0c0b; stroke: var(--brand); stroke-width: 0.2; }
+.map .here .pip { fill: #0a0c0b; stroke: var(--brand); stroke-width: 0.14; }
 .map .here .name { fill: var(--text); font-weight: 800; }
 
 .map .pv-pickup .pip { fill: var(--text); stroke: none; }
-.map .pv-drop .pip { fill: #0a0c0b; stroke: var(--text); stroke-width: 0.16; }
+.map .pv-drop .pip { fill: #0a0c0b; stroke: var(--text); stroke-width: 0.11; }
 
-.map .node:hover .pip { stroke: var(--text); stroke-width: 0.12; }
+.map .node:hover .pip { stroke: var(--text); stroke-width: 0.09; }
 .map .node:focus-visible { outline: none; }
-.map .node:focus-visible .pip { stroke: var(--brand); stroke-width: 0.2; }
+.map .node:focus-visible .pip { stroke: var(--brand); stroke-width: 0.14; }
 
 /* Floating status pill — duty state and earnings, always visible, never over
    the part of the map that matters. */
@@ -556,3 +556,9 @@ h2 .slots { display: flex; gap: 3px; margin-left: 2px; }
 .cmt-live { color: var(--brand); }
 .cmt-wait, .cmt-ok { color: var(--dim); }
 .cmt-dead { color: var(--red); }
+
+/* Earnings and hours on duty carry equal weight — one is meaningless without
+   the other, and hours is the number every rider actually tracks. */
+.etop { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+.ontime { text-align: right; }
+.earnings .amt.small { font-size: 26px; color: var(--text); }

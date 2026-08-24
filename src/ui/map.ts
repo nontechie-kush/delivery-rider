@@ -76,6 +76,35 @@ export function renderMap(state: ShiftState, previewOrderId: string | null): str
       })()
     : "";
 
+  // Twelve labels on a nine-kilometre map collide into mush. Place them greedily
+  // — try above the dot, then below — and drop any that still overlap something
+  // already placed. Whatever matters right now is placed first, so the labels
+  // that survive are the ones the player needs.
+  const placed: { x1: number; y1: number; x2: number; y2: number }[] = [];
+  const LABEL_H = 0.62;
+  const priority = (id: string): number =>
+    id === state.locationId ? 0 : stops.has(id) ? 1 : NODES.find((n) => n.id === id)?.kind === "PICKUP" ? 2 : 3;
+
+  const labelFor = (n: (typeof NODES)[number]): string => {
+    const halfWidth = Math.max(1.1, n.name.length * 0.21);
+    for (const dy of [-0.78, 1.05]) {
+      const box = { x1: n.x - halfWidth, x2: n.x + halfWidth, y1: n.y + dy - LABEL_H / 2, y2: n.y + dy + LABEL_H / 2 };
+      const clash = placed.some(
+        (p) => box.x1 < p.x2 && box.x2 > p.x1 && box.y1 < p.y2 && box.y2 > p.y1,
+      );
+      if (!clash) {
+        placed.push(box);
+        return `<text class="name" x="${n.x.toFixed(2)}" y="${(n.y + dy).toFixed(2)}">${esc(n.name)}</text>`;
+      }
+    }
+    return "";
+  };
+
+  const labels = new Map<string, string>();
+  for (const n of [...NODES].sort((a, b) => priority(a.id) - priority(b.id))) {
+    labels.set(n.id, labelFor(n));
+  }
+
   const dots = NODES.map((n) => {
     const stop = stops.get(n.id);
     const classes = [
@@ -93,12 +122,12 @@ export function renderMap(state: ShiftState, previewOrderId: string | null): str
 
     return `<g class="${classes}" data-go="${esc(n.id)}" tabindex="0" role="button"
                aria-label="Ride to ${esc(n.name)}, ${esc(n.area)}">
-              <circle class="hit" cx="${n.x.toFixed(2)}" cy="${n.y.toFixed(2)}" r="1.1" />
+              <circle class="hit" cx="${n.x.toFixed(2)}" cy="${n.y.toFixed(2)}" r="0.9" />
               <circle class="pip" cx="${n.x.toFixed(2)}" cy="${n.y.toFixed(2)}" r="${
-                n.id === state.locationId ? 0.52 : 0.38
+                n.id === state.locationId ? 0.34 : 0.24
               }" />
-              ${label ? `<text class="badge" x="${n.x.toFixed(2)}" y="${(n.y + 0.15).toFixed(2)}">${label}</text>` : ""}
-              <text class="name" x="${n.x.toFixed(2)}" y="${(n.y - 0.72).toFixed(2)}">${esc(n.name)}</text>
+              ${label ? `<text class="badge" x="${n.x.toFixed(2)}" y="${(n.y + 0.13).toFixed(2)}">${label}</text>` : ""}
+              ${labels.get(n.id) ?? ""}
             </g>`;
   }).join("");
 

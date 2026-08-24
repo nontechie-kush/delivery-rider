@@ -1,7 +1,7 @@
 import "./style.css";
 import { node } from "./sim/city.js";
 import { DEFAULT_CONFIG } from "./sim/config.js";
-import { commit } from "./sim/duty.js";
+import { commit, minutesOnlineAt } from "./sim/duty.js";
 import {
   accept,
   createShift,
@@ -14,7 +14,7 @@ import {
   travelTo,
   type ShiftState,
 } from "./sim/shift.js";
-import { esc, rupees } from "./ui/format.js";
+import { duration, esc, rupees } from "./ui/format.js";
 import { renderMap } from "./ui/map.js";
 import { locateMessage, locateRider } from "./ui/locate.js";
 import {
@@ -94,7 +94,9 @@ function bubble(): string {
     <div class="bubble">
       <span class="pulse" aria-hidden="true"></span>
       <span class="bub-main">${rupees(earnedSoFar())}</span>
-      <span class="bub-sub">${fmt(state.clock, cfg)} · <b class="${busy.cls}">${busy.word}</b></span>
+      <span class="bub-sub">${fmt(state.clock, cfg)} · ${duration(
+        minutesOnlineAt(state.duty, state.clock),
+      )} on · <b class="${busy.cls}">${busy.word}</b></span>
     </div>`;
 }
 
