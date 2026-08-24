@@ -177,6 +177,25 @@ export interface GameConfig {
   rideSecondsPerKm: number;
   rideSecondsMin: number;
   rideSecondsMax: number;
+  /**
+   * What full throttle represents. An Activa will do far more than this on an
+   * open road, but 48 km/h is about the ceiling on a Gurgaon arterial with
+   * traffic in it, and it makes the speedometer mean something.
+   */
+  rideTopSpeedKmh: number;
+  /**
+   * How much the ride itself moves the clock. A journey ridden flat out takes
+   * `ridePaceFloor` of the estimate; one ridden gently takes `ridePaceCeiling`.
+   *
+   * Without this the throttle costs risk and buys nothing, so coasting every
+   * ride is strictly optimal — which is the opposite of the pressure the whole
+   * mechanic exists to model.
+   */
+  ridePaceFloor: number;
+  ridePaceCeiling: number;
+  /** Seconds a red light holds you, and the odds of it going wrong if you run it. */
+  signalWaitSeconds: number;
+  signalRunCrashChance: number;
 
   /* ------------------------------------------------------- how it reads */
   /** Minutes the fit estimate assumes each order already in the bag costs. */
@@ -314,6 +333,11 @@ export const DEFAULT_CONFIG: GameConfig = {
   rideSecondsPerKm: 4.2,
   rideSecondsMin: 6,
   rideSecondsMax: 40,
+  rideTopSpeedKmh: 48,
+  ridePaceFloor: 0.85,
+  ridePaceCeiling: 1.18,
+  signalWaitSeconds: 4,
+  signalRunCrashChance: 0.35,
 
   queueCostPerOrder: 17,
   verdictBands: { easy: 0.45, tight: 0.7, risky: 0.92 },

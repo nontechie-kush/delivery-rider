@@ -13,7 +13,9 @@ import {
 } from "./road.js";
 import {
   createRide,
+  nextSignal,
   rideResult,
+  signalIsRed,
   stepRide,
   type Hazard,
   type RideOptions,
@@ -60,7 +62,7 @@ export interface RideHandle {
 export function runRide(
   host: HTMLElement,
   opts: RideOptions,
-  label: { to: string; orders: number },
+  label: { to: string; orders: number; topSpeedKmh: number },
 ): { promise: Promise<RideResult>; handle: RideHandle } {
   const ride = createRide(opts);
 
@@ -73,6 +75,8 @@ export function runRide(
         </div>
         <div class="ridebag">${label.orders} in the bag</div>
       </div>
+      <div class="ridespeed"><b>0</b><span>km/h</span></div>
+      <div class="ridelight" hidden><i></i><span></span></div>
       <div class="ridemeter"><i></i></div>
       <div class="ridecontrols">
         <button class="rc left" data-steer="-1" aria-label="Left"></button>
@@ -84,6 +88,9 @@ export function runRide(
 
   const canvas = host.querySelector<HTMLCanvasElement>(".ridecanvas")!;
   const meter = host.querySelector<HTMLElement>(".ridemeter i")!;
+  const speedo = host.querySelector<HTMLElement>(".ridespeed b")!;
+  const lightBox = host.querySelector<HTMLElement>(".ridelight")!;
+  const lightText = host.querySelector<HTMLElement>(".ridelight span")!;
   const ctx = canvas.getContext("2d")!;
 
   const input = { steer: 0, throttle: false, brake: false };
@@ -155,6 +162,18 @@ export function runRide(
       resize(canvas);
       draw(ctx, canvas, ride);
       meter.style.width = `${Math.min(100, (ride.z / ride.finishZ) * 100)}%`;
+      speedo.textContent = String(Math.round(ride.speed * label.topSpeedKmh));
+
+      // Warn about the next light only once it is close enough to act on.
+      const ahead = nextSignal(ride);
+      const near = ahead !== null && ahead.z - ride.z < 7000;
+      const red = ahead !== null && signalIsRed(ahead, ride.elapsed);
+      lightBox.hidden = !near && ride.waiting <= 0;
+      if (!lightBox.hidden) {
+        lightBox.className = `ridelight ${ride.waiting > 0 ? "held" : red ? "red" : "green"}`;
+        lightText.textContent =
+          ride.waiting > 0 ? "Waiting" : red ? "Red ahead" : "Green";
+      }
 
       if (ride.done || cancelled) {
         teardown();
@@ -244,6 +263,7 @@ function draw(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, ride: Ri
     maxy = seg.p2.screen.y;
   }
 
+  drawSignals(ctx, canvas, ride, playerX);
   drawHazards(ctx, canvas, ride, playerX);
   drawRider(ctx, canvas, ride);
 }
@@ -277,6 +297,57 @@ function drawSegment(ctx: CanvasRenderingContext2D, width: number, seg: Segment)
     polygon(ctx, lx1 - l1, p1.y, lx1 + l1, p1.y, lx2 + l2, p2.y, lx2 - l2, p2.y, LANE);
     lx1 += lane1;
     lx2 += lane2;
+  }
+}
+
+/** A gantry over the road with a light on it, visible from far enough to react. */
+function drawSignals(
+  ctx: CanvasRenderingContext2D,
+  canvas: HTMLCanvasElement,
+  ride: RideState,
+  playerX: number,
+): void {
+  const { width: w, height: h } = canvas;
+  const probe: Point = {
+    world: { x: 0, y: 0, z: 0 },
+    camera: { x: 0, y: 0, z: 0 },
+    screen: { x: 0, y: 0, w: 0, scale: 0 },
+  };
+
+  const visible = ride.signals
+    .filter((s) => s.z > ride.z - 400 && s.z < ride.z + 46000)
+    .sort((a, b) => b.z - a.z);
+
+  for (const s of visible) {
+    probe.world.x = 0;
+    probe.world.y = 0;
+    probe.world.z = s.z;
+    project(probe, playerX, CAMERA_HEIGHT, ride.z, w, h);
+    if (probe.screen.w <= 1) continue;
+
+    const red = signalIsRed(s, ride.elapsed);
+    const barY = probe.screen.y - probe.screen.w * 0.62;
+    const barH = Math.max(1, probe.screen.w * 0.05);
+
+    // The gantry, then the stop line on the tarmac.
+    ctx.fillStyle = "#1b211d";
+    ctx.fillRect(probe.screen.x - probe.screen.w, barY, probe.screen.w * 2, barH);
+
+    ctx.fillStyle = red ? "#ff4a35" : "#38e08a";
+    const lampR = Math.max(1, probe.screen.w * 0.055);
+    ctx.beginPath();
+    ctx.arc(probe.screen.x, barY + barH + lampR, lampR, 0, Math.PI * 2);
+    ctx.fill();
+
+    if (red) {
+      ctx.fillStyle = "rgba(255,255,255,0.75)";
+      ctx.fillRect(
+        probe.screen.x - probe.screen.w,
+        probe.screen.y - probe.screen.w * 0.02,
+        probe.screen.w * 2,
+        Math.max(1, probe.screen.w * 0.035),
+      );
+    }
   }
 }
 

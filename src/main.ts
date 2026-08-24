@@ -11,6 +11,7 @@ import {
   isOver,
   refill,
   reject,
+  rideMinutes,
   startDuty,
   travelTo,
   type ShiftState,
@@ -240,12 +241,28 @@ async function rideTo(destId: string): Promise<void> {
       density: Math.max(0, density),
       load,
       seed: Math.floor(Math.random() * 1e9),
+      signalWaitSeconds: cfg.signalWaitSeconds,
+      signalRunCrashChance: cfg.signalRunCrashChance,
     },
-    { to: node(destId).name, orders: state.carried.length },
+    { to: node(destId).name, orders: state.carried.length, topSpeedKmh: cfg.rideTopSpeedKmh },
   );
 
   const result = await promise;
-  travelTo(state, destId, result.minutesLost);
+
+  // How hard the journey was ridden decides how long it took. Flat out arrives
+  // at ridePaceFloor of the estimate, gently at ridePaceCeiling — so the
+  // throttle buys time rather than only costing risk.
+  const span = cfg.ridePaceCeiling - cfg.ridePaceFloor;
+  const paceFactor = cfg.ridePaceCeiling - result.pace * span;
+  const base = rideMinutes(state, state.locationId, destId);
+  const paceMinutes = base * (paceFactor - 1);
+
+  travelTo(state, destId, result.minutesLost + paceMinutes);
+  if (result.redsRun > 0) {
+    state.log.push(
+      `Ran ${result.redsRun} red light${result.redsRun > 1 ? "s" : ""} getting there.`,
+    );
+  }
   phase = "working";
   sheet = "peek";
   preview = null;

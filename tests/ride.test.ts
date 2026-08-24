@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_CONFIG as C } from "../src/sim/config.js";
-import { createRide, rideResult, stepRide, type RideInput } from "../src/ride/ride.js";
+import {
+  createRide,
+  rideResult,
+  signalIsRed,
+  stepRide,
+  type RideInput,
+} from "../src/ride/ride.js";
 import {
   CAMERA_HEIGHT,
   buildRoad,
@@ -21,6 +27,19 @@ function at(z: number): Point {
 }
 
 const FLAT_OUT: RideInput = { steer: 0, throttle: true, brake: false };
+
+/** Ride options with the signal rules filled in from config. */
+function makeRide(over: Partial<Parameters<typeof createRide>[0]> = {}) {
+  return createRide({
+    seconds: 10,
+    density: 0,
+    load: 0,
+    seed: 1,
+    signalWaitSeconds: C.signalWaitSeconds,
+    signalRunCrashChance: C.signalRunCrashChance,
+    ...over,
+  });
+}
 const COAST: RideInput = { steer: 0, throttle: false, brake: false };
 
 /** Runs a ride to completion, or until it plainly is not going to finish. */
@@ -102,8 +121,8 @@ describe("the road", () => {
 
 describe("riding", () => {
   it("finishes, and faster on the throttle than coasting", () => {
-    const fast = createRide({ seconds: 10, density: 0, load: 0, seed: 7 });
-    const slow = createRide({ seconds: 10, density: 0, load: 0, seed: 7 });
+    const fast = makeRide({ seconds: 10, density: 0, load: 0, seed: 7 });
+    const slow = makeRide({ seconds: 10, density: 0, load: 0, seed: 7 });
     const fastTime = playOut(fast, FLAT_OUT);
     const slowTime = playOut(slow, COAST);
 
@@ -113,22 +132,22 @@ describe("riding", () => {
   });
 
   it("takes roughly the seconds it was asked for at a good pace", () => {
-    const ride = createRide({ seconds: 12, density: 0, load: 0, seed: 3 });
+    const ride = makeRide({ seconds: 12, density: 0, load: 0, seed: 3 });
     const took = playOut(ride, FLAT_OUT);
     expect(took).toBeGreaterThan(6);
     expect(took).toBeLessThan(20);
   });
 
   it("is deterministic for a seed", () => {
-    const a = createRide({ seconds: 8, density: 0.6, load: 0.4, seed: 11 });
-    const b = createRide({ seconds: 8, density: 0.6, load: 0.4, seed: 11 });
+    const a = makeRide({ seconds: 8, density: 0.6, load: 0.4, seed: 11 });
+    const b = makeRide({ seconds: 8, density: 0.6, load: 0.4, seed: 11 });
     playOut(a, FLAT_OUT);
     playOut(b, FLAT_OUT);
     expect(rideResult(a)).toEqual(rideResult(b));
   });
 
   it("keeps the rider on or near the tarmac", () => {
-    const ride = createRide({ seconds: 10, density: 0, load: 0, seed: 5 });
+    const ride = makeRide({ seconds: 10, density: 0, load: 0, seed: 5 });
     for (let i = 0; i < 600; i++) stepRide(ride, { steer: 1, throttle: true, brake: false }, 1 / 60);
     expect(Math.abs(ride.x)).toBeLessThanOrEqual(1.5);
   });
@@ -139,8 +158,8 @@ describe("riding", () => {
    * costs more when it goes wrong.
    */
   it("makes a heavy bag cost more per crash", () => {
-    const light = createRide({ seconds: 20, density: 1, load: 0, seed: 21 });
-    const heavy = createRide({ seconds: 20, density: 1, load: 1, seed: 21 });
+    const light = makeRide({ seconds: 20, density: 1, load: 0, seed: 21 });
+    const heavy = makeRide({ seconds: 20, density: 1, load: 1, seed: 21 });
     playOut(light, FLAT_OUT);
     playOut(heavy, FLAT_OUT);
 
@@ -150,8 +169,8 @@ describe("riding", () => {
   });
 
   it("puts more in the way at higher density", () => {
-    const quiet = createRide({ seconds: 20, density: 0, load: 0, seed: 9 });
-    const rush = createRide({ seconds: 20, density: 1, load: 0, seed: 9 });
+    const quiet = makeRide({ seconds: 20, density: 0, load: 0, seed: 9 });
+    const rush = makeRide({ seconds: 20, density: 1, load: 0, seed: 9 });
     expect(rush.hazards.length).toBeGreaterThan(quiet.hazards.length);
   });
 
@@ -161,7 +180,7 @@ describe("riding", () => {
    * move together, and that a crash always costs something.
    */
   it("charges time for crashes and nothing without them", () => {
-    const ride = createRide({ seconds: 12, density: 1, load: 0, seed: 4 });
+    const ride = makeRide({ seconds: 12, density: 1, load: 0, seed: 4 });
     playOut(ride, FLAT_OUT);
     const result = rideResult(ride);
 
@@ -173,8 +192,8 @@ describe("riding", () => {
     let reckless = 0;
     let careful = 0;
     for (let seed = 1; seed <= 12; seed++) {
-      const a = createRide({ seconds: 14, density: 1, load: 0.5, seed });
-      const b = createRide({ seconds: 14, density: 1, load: 0.5, seed });
+      const a = makeRide({ seconds: 14, density: 1, load: 0.5, seed });
+      const b = makeRide({ seconds: 14, density: 1, load: 0.5, seed });
       playOut(a, FLAT_OUT);
       playOut(b, { steer: 0, throttle: false, brake: true });
       reckless += a.crashes;
@@ -184,7 +203,7 @@ describe("riding", () => {
   });
 
   it("survives a frame hitch without teleporting the rider", () => {
-    const ride = createRide({ seconds: 10, density: 0, load: 0, seed: 2 });
+    const ride = makeRide({ seconds: 10, density: 0, load: 0, seed: 2 });
     // A backgrounded tab hands back an enormous dt; the caller clamps it, and
     // a single clamped step must not cross the whole course.
     stepRide(ride, FLAT_OUT, 0.05);
@@ -204,5 +223,99 @@ describe("ride pacing config", () => {
       expect(seconds).toBeLessThanOrEqual(C.rideSecondsMax);
     }
     expect(C.rideSecondsMax).toBeLessThanOrEqual(45);
+  });
+});
+
+
+describe("speed and pace", () => {
+  /**
+   * The whole point of a throttle. Before this, riding hard only added crash
+   * risk and saved no time at all, so coasting every ride was strictly optimal
+   * — the exact opposite of the pressure the mechanic exists to model.
+   */
+  it("gives a faster ride a better pace than a slow one", () => {
+    const fast = makeRide({ seconds: 12, seed: 8 });
+    const slow = makeRide({ seconds: 12, seed: 8 });
+    playOut(fast, FLAT_OUT);
+    playOut(slow, { steer: 0, throttle: false, brake: false });
+
+    expect(rideResult(fast).pace).toBeGreaterThan(rideResult(slow).pace);
+  });
+
+  it("keeps pace inside nought to one", () => {
+    for (const input of [FLAT_OUT, COAST, { steer: 0, throttle: false, brake: true }]) {
+      const r = makeRide({ seconds: 10, seed: 3 });
+      playOut(r, input);
+      const pace = rideResult(r).pace;
+      expect(pace).toBeGreaterThanOrEqual(0);
+      expect(pace).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it("converts pace into a journey time inside the configured band", () => {
+    const span = C.ridePaceCeiling - C.ridePaceFloor;
+    expect(C.ridePaceCeiling - 1 * span).toBeCloseTo(C.ridePaceFloor, 6);
+    expect(C.ridePaceFloor).toBeLessThan(1);
+    expect(C.ridePaceCeiling).toBeGreaterThan(1);
+  });
+
+  it("reads full throttle as a speed a person recognises", () => {
+    expect(C.rideTopSpeedKmh).toBeGreaterThan(30);
+    expect(C.rideTopSpeedKmh).toBeLessThan(70);
+  });
+});
+
+describe("traffic signals", () => {
+  it("cycles between green and red", () => {
+    const signal = { z: 0, offset: 0, cycle: 12, resolved: false, ranIt: false };
+    expect(signalIsRed(signal, 0)).toBe(false);
+    expect(signalIsRed(signal, 11)).toBe(true);
+  });
+
+  it("puts signals on a ride long enough to have junctions", () => {
+    expect(makeRide({ seconds: 40, seed: 2 }).signals.length).toBeGreaterThan(0);
+  });
+
+  /**
+   * Stopping for a red costs seconds; running it usually does not, until it
+   * does. Compared across seeds rather than asserted exactly, because a rider
+   * still staggering from a crash cannot brake in time and will run one — which
+   * is correct behaviour, not a failure.
+   */
+  it("makes a braking rider run fewer reds than one who never lifts off", () => {
+    let braked = 0;
+    let flatOut = 0;
+    for (let seed = 1; seed <= 10; seed++) {
+      const a = makeRide({ seconds: 40, seed });
+      const b = makeRide({ seconds: 40, seed });
+      playOut(a, { steer: 0, throttle: false, brake: true }, 400);
+      playOut(b, FLAT_OUT, 400);
+      braked += a.redsRun;
+      flatOut += b.redsRun;
+    }
+    expect(braked).toBeLessThan(flatOut);
+  });
+
+  it("charges the rider who stops in seconds, not in crashes", () => {
+    let waited = 0;
+    for (let seed = 1; seed <= 10; seed++) {
+      const r = makeRide({ seconds: 40, seed });
+      playOut(r, { steer: 0, throttle: false, brake: true }, 400);
+      waited += r.waitedSeconds;
+    }
+    expect(waited).toBeGreaterThan(0);
+  });
+
+  it("does not let one signal judge the same rider twice", () => {
+    const r = makeRide({ seconds: 40, seed: 6 });
+    playOut(r, FLAT_OUT, 400);
+    expect(r.signals.every((s) => !s.resolved || s.z <= r.z + 1)).toBe(true);
+  });
+
+  it("never counts waiting time against the rider's pace", () => {
+    const r = makeRide({ seconds: 30, seed: 9 });
+    playOut(r, FLAT_OUT, 400);
+    // Sitting at a light is the light's doing, not the rider's.
+    expect(rideResult(r).pace).toBeGreaterThan(0.5);
   });
 });

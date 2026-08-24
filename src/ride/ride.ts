@@ -23,6 +23,26 @@ export interface Hazard {
   width: number;
 }
 
+/**
+ * A signal on the road ahead.
+ *
+ * The one mechanic worth borrowing from city driving games rather than racers:
+ * a red light is a genuine decision under time pressure. Stop and you lose four
+ * seconds you may not have. Run it and you probably get away with it — until
+ * you do not. That is exactly the trade the research describes riders making,
+ * and unlike traffic it cannot be dodged by steering.
+ */
+export interface Signal {
+  z: number;
+  /** Seconds into its own cycle when the ride began. */
+  offset: number;
+  /** Total cycle length; red occupies the last third of it. */
+  cycle: number;
+  /** Set once the rider has passed, so one signal cannot judge them twice. */
+  resolved: boolean;
+  ranIt: boolean;
+}
+
 export interface RideState {
   road: Segment[];
   hazards: Hazard[];
@@ -44,13 +64,28 @@ export interface RideState {
   done: boolean;
   /** How loaded the bag is, 0 to 1. Heavier handles worse. */
   load: number;
+  signals: Signal[];
+  /** Seconds left standing at a red. */
+  waiting: number;
+  /** Reds run without stopping. Shown at the end, because it is a choice.  */
+  redsRun: number;
+  /** Seconds lost sitting at lights. */
+  waitedSeconds: number;
+  /** Chance a run red goes wrong, and how long a red holds you. */
+  signalWaitSeconds: number;
+  signalRunCrashChance: number;
+  rand: () => number;
 }
 
 export interface RideResult {
   crashes: number;
   minutesLost: number;
-  /** Average fraction of top speed held, for flavour in the log. */
+  /**
+   * Average fraction of top speed actually held. Feeds straight back into how
+   * long the journey took, so riding hard genuinely arrives sooner.
+   */
   pace: number;
+  redsRun: number;
 }
 
 export interface RideOptions {
@@ -61,6 +96,8 @@ export interface RideOptions {
   /** 0 to 1. A full bag is slower to move and worse to stop. */
   load: number;
   seed: number;
+  signalWaitSeconds: number;
+  signalRunCrashChance: number;
 }
 
 const TOP_SPEED = 5200; // world units per second
@@ -105,9 +142,29 @@ export function createRide(opts: RideOptions): RideState {
     });
   }
 
+  // Roughly one junction every few hundred metres, as a Gurgaon arterial has.
+  const signals: Signal[] = [];
+  const spacing = 16000;
+  for (let z = spacing; z < finishZ - 3000; z += spacing * (0.7 + rand() * 0.7)) {
+    signals.push({
+      z,
+      offset: rand() * 14,
+      cycle: 12 + rand() * 8,
+      resolved: false,
+      ranIt: false,
+    });
+  }
+
   return {
     road,
     hazards,
+    signals,
+    waiting: 0,
+    redsRun: 0,
+    waitedSeconds: 0,
+    signalWaitSeconds: opts.signalWaitSeconds,
+    signalRunCrashChance: opts.signalRunCrashChance,
+    rand,
     z: 0,
     x: 0,
     speed: 0.34,
@@ -129,6 +186,22 @@ export interface RideInput {
   brake: boolean;
 }
 
+/** Whether a signal is showing red at a given moment. Red is the last third. */
+export function signalIsRed(signal: Signal, elapsed: number): boolean {
+  const phase = (signal.offset + elapsed) % signal.cycle;
+  return phase > signal.cycle * 0.66;
+}
+
+/** The next signal ahead of the rider, if there is one in sight. */
+export function nextSignal(ride: RideState): Signal | null {
+  let best: Signal | null = null;
+  for (const s of ride.signals) {
+    if (s.resolved || s.z < ride.z) continue;
+    if (!best || s.z < best.z) best = s;
+  }
+  return best;
+}
+
 /**
  * Advances the ride by `dt` real seconds.
  *
@@ -141,6 +214,14 @@ export function stepRide(ride: RideState, input: RideInput, dt: number): void {
   if (ride.done) return;
 
   ride.elapsed += dt;
+
+  // Held at a red. Nothing else happens until it clears.
+  if (ride.waiting > 0) {
+    ride.waiting -= dt;
+    ride.waitedSeconds += dt;
+    ride.speed = 0;
+    return;
+  }
 
   // Speed.
   const staggered = ride.stagger > 0;
@@ -176,6 +257,7 @@ export function stepRide(ride: RideState, input: RideInput, dt: number): void {
   }
 
   if (!staggered) checkCollisions(ride);
+  checkSignals(ride);
 
   if (ride.z >= ride.finishZ) ride.done = true;
 }
@@ -197,10 +279,45 @@ function checkCollisions(ride: RideState): void {
   }
 }
 
+/**
+ * Signals resolve as the rider crosses them.
+ *
+ * Come to a stop at a red and you wait it out. Cross it still moving and you
+ * have run it: usually nothing happens, sometimes something comes the other way.
+ */
+function checkSignals(ride: RideState): void {
+  for (const s of ride.signals) {
+    if (s.resolved || ride.z < s.z) continue;
+    s.resolved = true;
+
+    if (!signalIsRed(s, ride.elapsed)) continue;
+
+    if (ride.speed <= 0.14) {
+      // Stopped for it, like you are supposed to.
+      ride.waiting = ride.signalWaitSeconds;
+      continue;
+    }
+
+    s.ranIt = true;
+    ride.redsRun += 1;
+    if (ride.rand() < ride.signalRunCrashChance) {
+      ride.crashes += 1;
+      ride.minutesLost += CRASH_MINUTES * 1.6 * (1 + ride.load * 0.6);
+      ride.stagger = 0.9;
+      ride.speed = 0.16;
+    }
+  }
+}
+
 export function rideResult(ride: RideState): RideResult {
+  // Pace is measured against the time the journey should have taken, so sitting
+  // at a red does not count against the rider — the light did that, not them.
+  const moving = Math.max(0.001, ride.elapsed - ride.waitedSeconds);
+  const expected = ride.finishZ / TOP_SPEED;
   return {
     crashes: ride.crashes,
     minutesLost: Math.round(ride.minutesLost * 10) / 10,
-    pace: ride.elapsed > 0 ? Math.min(1, ride.z / ride.finishZ) : 0,
+    pace: Math.max(0, Math.min(1, expected / moving)),
+    redsRun: ride.redsRun,
   };
 }
