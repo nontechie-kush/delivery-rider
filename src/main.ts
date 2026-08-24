@@ -1,37 +1,25 @@
 import "./style.css";
-import { distance, node } from "./sim/city.js";
-import { DEFAULT_CONFIG, trafficAt } from "./sim/config.js";
-import { commit, minutesOnlineAt } from "./sim/duty.js";
+import { node } from "./sim/city.js";
+import { DEFAULT_CONFIG } from "./sim/config.js";
+import { commit } from "./sim/duty.js";
 import {
   accept,
   createShift,
-  demandNow,
-  fmt,
   idle,
   isOver,
   refill,
   reject,
-  rideMinutes,
   startDuty,
   travelTo,
   type ShiftState,
 } from "./sim/shift.js";
-import { duration, esc, rupees } from "./ui/format.js";
+import { esc } from "./ui/format.js";
 import { renderMap } from "./ui/map.js";
-import { runRide } from "./ride/screen.js";
+import { launchRide } from "./ride/launch.js";
 import { locateMessage, locateRider } from "./ui/locate.js";
-import {
-  actionBlock,
-  bagBlock,
-  commitmentBlock,
-  earningsBlock,
-  feedBlock,
-  fuelBlock,
-  incentiveBlock,
-  offersBlock,
-  startScreen,
-  summaryScreen,
-} from "./ui/panels.js";
+import { actionBlock, bagBlock, offersBlock, tabBar, type Tab } from "./ui/panels.js";
+import { startScreen, summaryScreen } from "./ui/screens.js";
+import { dayBlock, statusStrip } from "./ui/status.js";
 
 /**
  * NOW Partner — the rider app of a fictional quick-commerce platform.
@@ -56,6 +44,7 @@ let state: ShiftState = createShift(Math.floor(Math.random() * 1e9), cfg);
 let phase: Phase = "start";
 let preview: string | null = null;
 let sheet: SheetState = "half";
+let tab: Tab = "offers";
 
 /** Where the rider actually is, resolved once at the start of the day. */
 let startNodeId = "qk";
@@ -78,39 +67,23 @@ async function findRider(): Promise<void> {
   if (phase === "start") render();
 }
 
-const earnedSoFar = (): number => state.completed.reduce((s, c) => s + c.paid, 0);
-
-/** How the hour reads to a rider. Volume swings roughly six-fold across a day. */
-function busyness(demand: number): { word: string; cls: string } {
-  if (demand >= 3) return { word: "Slammed", cls: "hot" };
-  if (demand >= 1.8) return { word: "Busy", cls: "warm" };
-  if (demand >= 0.9) return { word: "Steady", cls: "" };
-  return { word: "Quiet", cls: "cold" };
-}
 
 /**
  * The floating status pill. Delivery Hero calls theirs the Bubble: duty state
  * and earnings, always visible, never in the way of the map.
  */
+/**
+ * A single pill saying where the rider is. Everything it used to carry —
+ * earnings, clock, how busy it is — now lives in the status strip, where it is
+ * readable rather than crammed over a map.
+ */
 function bubble(): string {
-  const busy = busyness(demandNow(state));
-  return `
-    <div class="bubble">
-      <span class="pulse" aria-hidden="true"></span>
-      <span class="bub-main">${rupees(earnedSoFar())}</span>
-      <span class="bub-sub">${fmt(state.clock, cfg)} · ${duration(
-        minutesOnlineAt(state.duty, state.clock),
-      )} on · <b class="${busy.cls}">${busy.word}</b></span>
-    </div>`;
+  return `<div class="bubble"><span class="pulse" aria-hidden="true"></span>
+    <span>${esc(node(state.locationId).name)}</span></div>`;
 }
 
 function mapLayer(): string {
-  return `
-    <div class="maplayer">
-      ${renderMap(state, preview)}
-      ${bubble()}
-      <div class="whereami">at ${esc(node(state.locationId).name)}</div>
-    </div>`;
+  return `<div class="maplayer">${renderMap(state, preview)}${bubble()}</div>`;
 }
 
 function beginDay(): void {
@@ -155,10 +128,8 @@ function render(): void {
 
   if (phase === "start") {
     app.innerHTML = `
-      <div class="statusbar">
-        <span class="brand">NOW <em>partner</em></span>
-      </div>
-      ${startScreen(cfg, locateNote, locating)}`;
+      <div class="statusbar"><span class="brand">NOW <em>partner</em></span></div>
+      ${startScreen(cfg, locateNote, locating, chosenSlot)}`;
     return;
   }
 
@@ -181,19 +152,22 @@ function render(): void {
       <span class="online"><i aria-hidden="true"></i> On duty</span>
     </div>
 
+    ${statusStrip(state, cfg)}
+
     ${mapLayer()}
 
     <div class="sheet ${sheet}">
       <button class="grabber" data-sheet="cycle" aria-label="Resize panel"><i></i></button>
+      ${tabBar(state, tab)}
       <div class="sheet-scroll">
-        ${earningsBlock(state, cfg)}
-        ${fuelBlock(state, cfg)}
-        ${commitmentBlock(state, cfg)}
-        ${incentiveBlock(state, cfg)}
-        ${feedBlock(state)}
-        ${offersBlock(state, cfg)}
-        ${bagBlock(state)}
-        <div class="endshift"><button data-end="1">Go off duty</button></div>
+        ${
+          tab === "offers"
+            ? offersBlock(state, cfg)
+            : tab === "bag"
+              ? bagBlock(state)
+              : dayBlock(state, cfg)
+        }
+        ${tab === "day" ? '<div class="endshift"><button data-end="1">Go off duty</button></div>' : ""}
       </div>
       ${actionBlock(state)}
     </div>`;
@@ -206,83 +180,27 @@ function render(): void {
  * Ride there, then arrive.
  *
  * The ride is a UI layer over a sim that stays authoritative: it plays out, and
- * what it cost in spills is handed back to travelTo as extra minutes. Everything
- * downstream — deadlines, fuel, the guarantee — is worked out by the simulation
- * exactly as before.
+ * what it cost is handed back as extra minutes. Everything downstream —
+ * deadlines, fuel, the guarantee — is still worked out by the simulation.
  */
-/**
- * Minutes until the tightest order this stop serves goes late, or null if this
- * ride is not serving anything on a clock. Drives the "you are not going to
- * make this" warning on the ride HUD.
- */
-function tightestSlack(destId: string): number | null {
-  const serving = state.carried.filter(
-    (c) => (c.leg === "TO_PICKUP" ? c.order.pickupId : c.order.dropId) === destId,
-  );
-  if (serving.length === 0) return null;
-  return Math.min(...serving.map((c) => c.order.dueAt - state.clock));
-}
-
 async function rideTo(destId: string): Promise<void> {
-  const km = distance(state.locationId, destId);
-  const seconds = Math.max(
-    cfg.rideSecondsMin,
-    Math.min(cfg.rideSecondsMax, km * cfg.rideSecondsPerKm),
-  );
-
-  // Rush hour puts more between you and the drop, and a full bag handles worse.
-  const density = Math.min(1, (trafficAt(state.clock, cfg) - 0.8) / 0.6);
-  const load = state.carried.length / state.bag.length;
-
   phase = "riding";
   render();
 
-  const stage = app?.querySelector<HTMLElement>(".ridestage");
-  if (!stage) {
-    // No canvas to ride on — never strand the player, just travel.
-    travelTo(state, destId);
-    phase = "working";
-    finishIfOver();
-    render();
-    return;
-  }
-
-  const { promise } = runRide(
-    stage,
-    {
-      seconds,
-      density: Math.max(0, density),
-      load,
-      seed: Math.floor(Math.random() * 1e9),
-      signalWaitSeconds: cfg.signalWaitSeconds,
-      signalRunCrashChance: cfg.signalRunCrashChance,
-    },
-    {
-      to: node(destId).name,
-      orders: state.carried.length,
-      topSpeedKmh: cfg.rideTopSpeedKmh,
-      km,
-      etaMinutes: rideMinutes(state, state.locationId, destId),
-      slackMinutes: tightestSlack(destId),
-    },
+  const outcome = await launchRide(
+    app?.querySelector<HTMLElement>(".ridestage"),
+    state,
+    cfg,
+    destId,
   );
 
-  const result = await promise;
-
-  // How hard the journey was ridden decides how long it took. Flat out arrives
-  // at ridePaceFloor of the estimate, gently at ridePaceCeiling — so the
-  // throttle buys time rather than only costing risk.
-  const span = cfg.ridePaceCeiling - cfg.ridePaceFloor;
-  const paceFactor = cfg.ridePaceCeiling - result.pace * span;
-  const base = rideMinutes(state, state.locationId, destId);
-  const paceMinutes = base * (paceFactor - 1);
-
-  travelTo(state, destId, result.minutesLost + paceMinutes);
-  if (result.redsRun > 0) {
+  travelTo(state, destId, outcome.extraMinutes);
+  if (outcome.redsRun > 0) {
     state.log.push(
-      `Ran ${result.redsRun} red light${result.redsRun > 1 ? "s" : ""} getting there.`,
+      `Ran ${outcome.redsRun} red light${outcome.redsRun > 1 ? "s" : ""} getting there.`,
     );
   }
+
   phase = "working";
   sheet = "peek";
   preview = null;
@@ -301,15 +219,22 @@ app.addEventListener("click", (event) => {
   if (!(target instanceof Element)) return;
 
   const hit = target.closest<HTMLElement>(
-    "[data-accept],[data-reject],[data-go],[data-wait],[data-end],[data-restart],[data-sheet],[data-begin],[data-slot],[data-refill]",
+    "[data-accept],[data-reject],[data-go],[data-wait],[data-end],[data-restart],[data-sheet],[data-begin],[data-slot],[data-refill],[data-tab]",
   );
   if (!hit) return;
 
   const d = hit.dataset;
 
+  if (d["tab"]) {
+    tab = d["tab"] as Tab;
+    render();
+    return;
+  }
+
   if (d["slot"] !== undefined) {
     chosenSlot = d["slot"];
-    return; // the radio handles its own visual state
+    render();
+    return;
   }
 
   if (d["begin"]) {
@@ -330,6 +255,7 @@ app.addEventListener("click", (event) => {
   }
 
   if (d["accept"]) accept(state, d["accept"]);
+
   else if (d["reject"]) reject(state, d["reject"]);
   else if (d["refill"]) refill(state);
   else if (d["wait"]) idle(state, Number(d["wait"]));

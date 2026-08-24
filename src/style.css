@@ -249,16 +249,6 @@ h2 .count {
 
 /* The day bar is also the demand curve, so the evening rush is visible before
    it lands. Knowing what is coming is most of the skill this game teaches. */
-.daycurve {
-  position: relative;
-  display: flex;
-  align-items: flex-end;
-  gap: 2px;
-  height: 26px;
-  margin-top: 11px;
-}
-.daycurve i { flex: 1; background: var(--line); border-radius: 1px; }
-.daycurve .nowline { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--brand); }
 
 /* ------------------------------------------------------------ incentive */
 
@@ -538,30 +528,7 @@ h2 .slots { display: flex; gap: 3px; margin-left: 2px; }
 }
 .start .go:hover { background: #2af0af; }
 
-/* The booked window, stated the whole time it applies. A guarantee the player
-   cannot see is one they will break by accident. */
-.commitment {
-  margin: 12px 14px 0; background: var(--card);
-  border: 1px solid var(--line); border-left: 3px solid var(--brand);
-  border-radius: 4px; padding: 10px 13px;
-}
-.commitment.waiting { border-left-color: var(--dimmer); }
-.commitment.dead { border-left-color: var(--red); }
-.commitment.done { border-left-color: var(--line); }
-.cmt-head { display: flex; justify-content: space-between; align-items: baseline; }
-.cmt-head b { font-size: 14.5px; font-weight: 650; }
-.cmt-pay { font-size: 16px; font-weight: 750; color: var(--brand); font-variant-numeric: tabular-nums; }
-.commitment.dead .cmt-pay { color: var(--red); text-decoration: line-through; }
-.cmt-status { font-size: 11.5px; margin-top: 3px; }
-.cmt-live { color: var(--brand); }
-.cmt-wait, .cmt-ok { color: var(--dim); }
-.cmt-dead { color: var(--red); }
 
-/* Earnings and hours on duty carry equal weight — one is meaningless without
-   the other, and hours is the number every rider actually tracks. */
-.etop { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
-.ontime { text-align: right; }
-.earnings .amt.small { font-size: 26px; color: var(--text); }
 
 .cmt-need { font-size: 12.5px; color: var(--text); margin-top: 4px; }
 .commitment .bar { height: 5px; background: #0a0d0b; border-radius: 3px; margin: 6px 0 5px; overflow: hidden; }
@@ -570,34 +537,6 @@ h2 .slots { display: flex; gap: 3px; margin-left: 2px; }
 .commitment.waiting .bar i { background: var(--dimmer); }
 .summary tr.void td { color: var(--red); }
 
-/* Fuel. A fee means nothing without the cost of reaching it, so every offer
-   carries what the trip burns and what survives it. */
-.fuelline {
-  display: flex; justify-content: space-between; align-items: baseline;
-  font-size: 12px; color: var(--dim);
-  border-top: 1px solid var(--line-soft); margin-top: 8px; padding-top: 7px;
-}
-.fuelnums b { color: var(--text); font-weight: 650; }
-.fuelline.thin .fuelnums b { color: var(--amber); }
-
-.fuel {
-  margin: 12px 14px 0; background: var(--card);
-  border: 1px solid var(--line); border-left: 3px solid var(--brand-deep);
-  border-radius: 4px; padding: 10px 13px;
-}
-.fuel.low { border-left-color: var(--amber); }
-.fuel.stranded { border-left-color: var(--red); }
-.fuel-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
-.fuel-head b { font-size: 15px; font-weight: 650; font-variant-numeric: tabular-nums; }
-.fuel.low .fuel-head b { color: var(--amber); }
-.fuel.stranded .fuel-head b { color: var(--red); }
-.fuel-head span { font-size: 11.5px; color: var(--dimmer); }
-.fuel .bar { height: 5px; background: #0a0d0b; border-radius: 3px; margin: 7px 0 5px; overflow: hidden; }
-.fuel .bar i { display: block; height: 100%; background: var(--brand); }
-.fuel.low .bar i { background: var(--amber); }
-.fuel.stranded .bar i { background: var(--red); }
-.fuel-foot { font-size: 11.5px; color: var(--dimmer); }
-.fuel.stranded .fuel-foot { color: var(--red); }
 
 /* ------------------------------------------------------------------ ride */
 
@@ -686,3 +625,166 @@ h2 .slots { display: flex; gap: 3px; margin-left: 2px; }
 .rs span { font-size: 10px; letter-spacing: .09em; text-transform: uppercase; color: rgba(255,255,255,.45); }
 .ridestats.late .rs-eta { color: #ff6a52; }
 .ridestats.late .rs-eta + span { color: rgba(255,106,82,.8); }
+
+/* ==========================================================================
+   REDESIGN
+   One rule throughout: a bordered card means something you act on. Status is
+   type on the ground. Before this, six status blocks all wore the same
+   left-stripe card, so nothing stood out and the only thing the player acts on
+   sat sixth in a scroll of seven.
+   ========================================================================== */
+
+/* -------------------------------------------------------------- status */
+
+.status { flex: none; padding: 10px 14px 12px; background: var(--chrome); border-bottom: 1px solid var(--line); }
+
+.statrow {
+  display: flex; align-items: baseline; gap: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.stat-time { font-size: 19px; font-weight: 650; letter-spacing: -.02em; }
+.stat-cash { font-size: 19px; font-weight: 700; color: var(--brand); letter-spacing: -.02em; }
+.stat-on { font-size: 13px; color: var(--dim); }
+.stat-busy {
+  margin-left: auto; font-size: 10.5px; font-weight: 800;
+  letter-spacing: .09em; text-transform: uppercase; color: var(--dim);
+}
+.stat-busy.hot { color: var(--red); }
+.stat-busy.warm { color: var(--amber); }
+.stat-busy.cold { color: var(--dimmer); }
+
+/* The day's tension gets the only bar up here. */
+.goalrow { margin-top: 9px; }
+.goalbar { height: 4px; background: #0a0d0b; border-radius: 2px; overflow: hidden; }
+.goalbar i { display: block; height: 100%; background: var(--brand); transition: width .25s ease; }
+.goalrow.close .goalbar i { background: var(--amber); }
+.goaltext { display: block; font-size: 12px; color: var(--dim); margin-top: 5px; }
+.goaltext b { color: var(--text); font-weight: 600; }
+.goalrow.close .goaltext b { color: var(--amber); }
+
+/* Warnings appear only when true, so a full row means act. */
+.warnrow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.warn {
+  font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 11px;
+  background: #2a2416; color: var(--amber);
+}
+.warn.tight { background: #33260f; }
+.warn.bad { background: #2e1a16; color: var(--red); }
+
+/* ---------------------------------------------------------------- tabs */
+
+.tabs { flex: none; display: flex; gap: 2px; padding: 0 12px 8px; }
+.tab {
+  flex: 1; background: none; border: 0; border-radius: 7px;
+  color: var(--dim); font: inherit; font-size: 13.5px; font-weight: 600;
+  padding: 8px 4px; text-align: center; cursor: pointer;
+}
+.tab.on { background: var(--card-2); color: var(--text); }
+.tab i {
+  font-style: normal; font-size: 11px; font-weight: 700;
+  background: var(--brand); color: #062119; border-radius: 9px;
+  padding: 1px 6px; margin-left: 5px;
+}
+.tab.on i { background: var(--brand); }
+.tab:not(.on) i { background: var(--line); color: var(--dim); }
+
+/* ------------------------------------------------------------- day tab */
+
+.dayrows { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 5px; overflow: hidden; }
+.dr { background: var(--card); padding: 10px 12px; }
+.dr.wide { grid-column: 1 / -1; }
+.dr.bad b { color: var(--red); }
+.dr span { display: block; font-size: 10.5px; letter-spacing: .09em; text-transform: uppercase; color: var(--dimmer); }
+.dr b { display: block; font-size: 16px; font-weight: 650; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.dr b em { font-style: normal; font-size: 12px; font-weight: 400; color: var(--dim); }
+.dr em { font-style: normal; display: block; font-size: 11.5px; color: var(--dimmer); margin-top: 4px; }
+.minibar { height: 4px; background: #0a0d0b; border-radius: 2px; margin-top: 7px; overflow: hidden; }
+.minibar i { display: block; height: 100%; background: var(--brand); }
+.minibar.low i { background: var(--amber); }
+
+.feed { list-style: none; margin: 0; padding: 0; }
+.feed li { font-size: 12.5px; color: var(--dimmer); padding: 4px 0; border-bottom: 1px solid var(--line-soft); }
+.feed li:last-child { border-bottom: 0; }
+.feed li.flag { color: var(--amber); }
+
+/* ------------------------------------------------------------ map pill */
+
+.bubble {
+  position: absolute; top: 12px; left: 12px;
+  display: flex; align-items: center; gap: 8px;
+  background: rgba(10,12,11,.9); border: 1px solid var(--line);
+  border-radius: 20px; padding: 6px 13px 6px 10px; font-size: 12.5px; font-weight: 600;
+}
+
+/* --------------------------------------------------------------- start */
+
+.start { flex: 1; overflow-y: auto; padding: 26px 16px 40px; }
+.start h1 { font-size: 27px; font-weight: 750; letter-spacing: -.03em; margin: 0 0 6px; }
+.start .sub { font-size: 14px; color: var(--dim); line-height: 1.5; margin: 0 0 20px; max-width: 42ch; }
+
+/* You cannot sensibly pick a window without seeing when the orders are. */
+.daychart { margin-bottom: 22px; }
+.daychart .bars { display: flex; align-items: flex-end; gap: 2px; height: 62px; }
+.daychart .bars i { flex: 1; background: var(--line); border-radius: 1px 1px 0 0; transition: background .2s; }
+.daychart .bars i.inslot { background: #2c3b34; }
+.daychart .bars i.picked { background: var(--brand); }
+.daychart .axis { display: flex; justify-content: space-between; font-size: 10px; color: var(--dimmer); margin-top: 5px; }
+
+.slots { display: flex; flex-direction: column; gap: 7px; margin-bottom: 20px; }
+.slot {
+  display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: center;
+  background: var(--card); border: 1px solid var(--line); border-radius: 6px;
+  padding: 12px 14px; cursor: pointer;
+}
+.slot:hover { border-color: #3c4640; }
+.slot.on { border-color: var(--brand); background: #16211d; }
+.slot-when b { display: block; font-size: 15px; font-weight: 650; }
+.slot-when span { font-size: 12px; color: var(--dim); font-variant-numeric: tabular-nums; }
+.slot-need { font-size: 11.5px; color: var(--dim); text-align: right; line-height: 1.4; }
+.slot-need span { color: var(--dimmer); }
+.slot-pay { font-size: 18px; font-weight: 750; color: var(--brand); font-variant-numeric: tabular-nums; }
+.slot-pay.free { color: var(--dimmer); font-weight: 400; }
+
+.locrow {
+  display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--dim);
+  margin-bottom: 18px;
+}
+.locpin { width: 8px; height: 8px; border-radius: 50%; background: var(--brand); flex: none; box-shadow: 0 0 0 4px rgba(0,227,155,.15); }
+.locrow.busy .locpin { background: var(--dimmer); box-shadow: none; }
+
+button.primary {
+  display: block; width: 100%; background: var(--brand); border: 0; border-radius: 6px;
+  color: #062119; font: inherit; font-size: 16px; font-weight: 750;
+  padding: 15px; cursor: pointer; min-height: 56px;
+}
+button.primary:hover { background: #2af0af; }
+.start .foot { font-size: 12px; color: var(--dimmer); text-align: center; margin: 10px 0 0; }
+
+/* ------------------------------------------------------------- summary */
+
+.summary { flex: 1; overflow-y: auto; padding: 30px 16px 40px; }
+.eyebrow { font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--dimmer); font-weight: 600; }
+.net { font-size: 48px; font-weight: 750; letter-spacing: -.04em; color: var(--brand); line-height: 1.02; margin: 4px 0 4px; font-variant-numeric: tabular-nums; }
+.netsub { font-size: 13.5px; color: var(--dim); margin: 0 0 22px; }
+.netsub b { color: var(--text); }
+
+/* The guarantee is the loudest thing in a day, so it gets a verdict, not a row. */
+.verdict { border-radius: 6px; padding: 13px 15px; margin-bottom: 10px; }
+.verdict.good { background: #16211d; border: 1px solid var(--brand-deep); }
+.verdict.bad { background: #241715; border: 1px solid #4a2620; }
+.verdict b { display: block; font-size: 15.5px; font-weight: 700; }
+.verdict.good b { color: var(--brand); }
+.verdict.bad b { color: var(--red); }
+.verdict span { display: block; font-size: 12.5px; color: var(--dim); margin-top: 3px; line-height: 1.45; }
+
+.ledger { width: 100%; border-collapse: collapse; font-size: 14px; margin: 18px 0 0; }
+.ledger td { padding: 9px 0; border-bottom: 1px solid var(--line-soft); }
+.ledger td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+.ledger td em { font-style: normal; color: var(--dimmer); font-size: 12px; }
+.ledger tr.out td { color: var(--dim); }
+
+.aside { font-size: 13px; color: var(--dim); line-height: 1.55; margin: 16px 0 0; }
+.aside b { color: var(--text); }
+.aside span { color: var(--amber); }
+.aside.bad { color: var(--red); }
+.summary .primary { margin-top: 24px; }

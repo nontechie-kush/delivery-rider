@@ -76,23 +76,36 @@ describe("the buttons respond", () => {
     expect(height()).not.toBe(first);
   });
 
-  it("books a slot when its row is clicked anywhere, not just the radio", async () => {
+  it("books a slot when its row is clicked anywhere, not just a control", async () => {
     const app = await mountApp();
     const row = app.querySelector('[data-slot="evening"]');
     expect(row).not.toBeNull();
 
     // Click the label's text, which is what a thumb actually hits.
-    click(row?.querySelector(".slotbody") ?? row);
+    click(row?.querySelector(".slot-when") ?? row);
+    expect(app.querySelector('[data-slot="evening"]')?.className).toContain("on");
+
+    click(app.querySelector("[data-begin]"));
+    // The booked window lives on the Day tab now, not stacked above the orders.
+    click(app.querySelector('[data-tab="day"]'));
+    expect(app.innerHTML).toContain("Dinner rush");
+  });
+
+  it("switches between orders, bag and day", async () => {
+    const app = await mountApp();
     click(app.querySelector("[data-begin]"));
 
-    expect(app.innerHTML).toContain("Dinner rush");
+    for (const id of ["bag", "day", "offers"]) {
+      click(app.querySelector(`[data-tab="${id}"]`));
+      expect(app.querySelector(`[data-tab="${id}"]`)?.className).toContain("on");
+    }
   });
 
   it("advances the clock when a ride is taken", async () => {
     const app = await mountApp();
     click(app.querySelector("[data-begin]"));
 
-    const clockText = () => app.querySelector(".bub-sub")?.textContent ?? "";
+    const clockText = () => app.querySelector(".stat-time")?.textContent ?? "";
     const before = clockText();
     click(app.querySelector("[data-wait]"));
     expect(clockText()).not.toBe(before);
@@ -101,6 +114,8 @@ describe("the buttons respond", () => {
   it("ends the day and offers another", async () => {
     const app = await mountApp();
     click(app.querySelector("[data-begin]"));
+    // Going off duty is a deliberate act, tucked on the Day tab.
+    click(app.querySelector('[data-tab="day"]'));
     click(app.querySelector("[data-end]"));
 
     expect(app.querySelector(".summary")).not.toBeNull();
