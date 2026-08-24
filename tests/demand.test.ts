@@ -76,9 +76,9 @@ describe("expenses", () => {
   it("charges roughly a third of gross, matching measured rider costs", () => {
     // Sanity band rather than a fixed number, so tuning does not break it but a
     // structural mistake does. Measured reality is 32% of gross.
-    const perKm = E.expensePerKm;
-    const typicalKm = 90; // a full shift of riding, per measured 70-100 km
-    const cost = E.dailyExpenses + typicalKm * perKm;
+    const petrol = E.vehicles.find((v) => v.id === "activa")!;
+    const typicalKm = 120; // a full day of riding
+    const cost = E.dailyExpenses + typicalKm * (petrol.costPerKm + petrol.upkeepPerKm);
     expect(cost).toBeGreaterThan(300);
     expect(cost).toBeLessThan(900);
   });

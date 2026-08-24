@@ -53,6 +53,49 @@ export interface SlotConfig {
   minDeliveries: number;
 }
 
+/**
+ * What the rider is riding, and what it costs to move it.
+ *
+ * Range is tracked in kilometres for both petrol and electric so one gauge
+ * covers everything, but the two refill in genuinely different ways and that
+ * difference is the point of the ladder:
+ *
+ *   - Petrol is expensive to run and forgiving to refill: pumps are everywhere,
+ *     you can put in as little as you like, and it takes a few minutes.
+ *   - Electric is roughly a tenth of the cost per kilometre and unforgiving:
+ *     swap stations are few, the swap is all-or-nothing, and running out
+ *     somewhere without one is a long walk.
+ *   - A cycle costs nothing to move and never needs either.
+ *
+ * Numbers are real. Petrol is ₹102.97/L in Gurgaon; an Activa returns about
+ * 47 km/l in traffic off a 5.3 litre tank; a Splendor does better on both. A
+ * swappable delivery e-scooter runs about ₹0.15–0.25/km against ₹2.00–2.50 for
+ * petrol, and a swap takes under two minutes.
+ */
+export type EnergyKind = "petrol" | "battery" | "none";
+
+export interface VehicleConfig {
+  id: string;
+  name: string;
+  energy: EnergyKind;
+  /** Kilometres of range on a full tank or a fresh battery. */
+  rangeKm: number;
+  /** Rupees to restore one kilometre of range. */
+  costPerKm: number;
+  /**
+   * Battery swaps are all-or-nothing: you pay for the whole pack whatever was
+   * left in the old one. Petrol is metered, so you pay for what you put in.
+   */
+  refillIsWholeUnit: boolean;
+  /** Minutes lost refilling. */
+  refillMinutes: number;
+  /** Minutes per kilometre before congestion. Lower is faster. */
+  minPerKm: number;
+  /** Wear and servicing per kilometre, on top of energy. */
+  upkeepPerKm: number;
+  bagSlots: readonly SlotKind[];
+}
+
 export interface PlaceBehaviour {
   /** Mean true prep time in game-minutes. */
   prepMean: number;
@@ -98,8 +141,6 @@ export interface GameConfig {
   latePayFactor: number;
   /** Fixed daily cost — phone data, bag rental. */
   dailyExpenses: number;
-  /** Fuel, servicing and wear, per kilometre ridden. */
-  expensePerKm: number;
 
   /* -------------------------------------------------------------- duty */
   slots: readonly SlotConfig[];
@@ -113,8 +154,18 @@ export interface GameConfig {
   /** Consecutive days without logging in before the account goes inactive. */
   inactivityDaysBeforeBlock: number;
 
-  /* --------------------------------------------------------------- bag */
-  bagSlots: readonly SlotKind[];
+  /* ----------------------------------------------------------- vehicles */
+  vehicles: readonly VehicleConfig[];
+  /** Which vehicle the rider starts on. */
+  startVehicleId: string;
+  /** Node ids with a petrol pump. */
+  fuelStops: readonly string[];
+  /** Node ids with a battery swap station. Deliberately fewer than pumps. */
+  swapStops: readonly string[];
+  /** Range fraction below which the gauge warns. */
+  lowRangeWarning: number;
+  /** Minutes per kilometre pushed when the rider runs dry away from a stop. */
+  pushMinPerKm: number;
 
   /* ------------------------------------------------------- how it reads */
   /** Minutes the fit estimate assumes each order already in the bag costs. */
@@ -187,7 +238,6 @@ export const DEFAULT_CONFIG: GameConfig = {
   ],
   latePayFactor: 0.5,
   dailyExpenses: 80,
-  expensePerKm: 4,
 
   /**
    * Bookable slots with payout floors, as Zepto and Blinkit run them. Committing
@@ -210,9 +260,45 @@ export const DEFAULT_CONFIG: GameConfig = {
   // Delivery Partners in the area" — which is to say, not guaranteed.
   inactivityDaysBeforeBlock: 15,
 
-  // Two hot, one cold, two flexible. A run of hot orders cannot all be taken,
-  // which is exactly when the player has to choose.
-  bagSlots: ["HOT", "HOT", "COLD", "ANY", "ANY"],
+  vehicles: [
+    // Where most riders actually are. Cheap to buy, expensive to feed.
+    {
+      id: "activa", name: "Honda Activa", energy: "petrol",
+      rangeKm: 249, costPerKm: 2.19, refillIsWholeUnit: false, refillMinutes: 4,
+      minPerKm: 2.08, upkeepPerKm: 0.9,
+      bagSlots: ["HOT", "HOT", "COLD", "ANY", "ANY"],
+    },
+    // Better mileage, bigger tank, less comfortable over a long shift.
+    {
+      id: "splendor", name: "Hero Splendor", energy: "petrol",
+      rangeKm: 617, costPerKm: 1.63, refillIsWholeUnit: false, refillMinutes: 4,
+      minPerKm: 2.0, upkeepPerKm: 0.8,
+      bagSlots: ["HOT", "HOT", "COLD", "ANY", "ANY"],
+    },
+    // A tenth of the running cost. The catch is where you can refill it.
+    {
+      id: "eswap", name: "Swap e-scooter", energy: "battery",
+      rangeKm: 70, costPerKm: 0.21, refillIsWholeUnit: true, refillMinutes: 2,
+      minPerKm: 2.2, upkeepPerKm: 0.35,
+      bagSlots: ["HOT", "HOT", "COLD", "ANY", "ANY"],
+    },
+    // Free to move and slow. Genuinely viable in a dense zone at rush hour.
+    {
+      id: "ecycle", name: "E-cycle", energy: "battery",
+      rangeKm: 45, costPerKm: 0.12, refillIsWholeUnit: true, refillMinutes: 2,
+      minPerKm: 3.4, upkeepPerKm: 0.15,
+      bagSlots: ["HOT", "COLD", "ANY"],
+    },
+  ],
+  startVehicleId: "activa",
+  // Pumps sit on the arterials, which is where they are in Gurgaon.
+  fuelStops: ["d2", "d7", "d5"],
+  // Swap stations are rarer, and that is the whole trade.
+  swapStops: ["d1", "d4"],
+  lowRangeWarning: 0.2,
+  // Pushing a dead two-wheeler is about walking pace.
+  pushMinPerKm: 13,
+
 
   queueCostPerOrder: 17,
   verdictBands: { easy: 0.45, tight: 0.7, risky: 0.92 },
@@ -243,6 +329,27 @@ export const DEFAULT_CONFIG: GameConfig = {
 };
 
 /* --------------------------------------------------------------- helpers */
+
+export function vehicleOf(id: string, cfg: GameConfig): VehicleConfig {
+  return cfg.vehicles.find((v) => v.id === id) ?? cfg.vehicles[0]!;
+}
+
+/** Where this vehicle can restore range, if anywhere. */
+export function refillStopsFor(vehicle: VehicleConfig, cfg: GameConfig): readonly string[] {
+  if (vehicle.energy === "petrol") return cfg.fuelStops;
+  if (vehicle.energy === "battery") return cfg.swapStops;
+  return [];
+}
+
+/** Rupees of energy burnt covering a distance on this vehicle. */
+export function energyCost(km: number, vehicle: VehicleConfig): number {
+  return km * vehicle.costPerKm;
+}
+
+/** Everything a kilometre costs: energy plus wear. */
+export function runningCost(km: number, vehicle: VehicleConfig): number {
+  return km * (vehicle.costPerKm + vehicle.upkeepPerKm);
+}
 
 export function placeOf(id: string, cfg: GameConfig): PlaceBehaviour {
   return cfg.places[id] ?? cfg.defaultPlace;

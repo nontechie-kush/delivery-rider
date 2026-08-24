@@ -1,8 +1,11 @@
 import { load, makeBag, fits, unload } from "./bag.js";
-import { BIKE_MIN_PER_KM, START_NODE_ID, distance, node, travelMinutes } from "./city.js";
+import { START_NODE_ID, distance, node, travelMinutes } from "./city.js";
 import {
   DEFAULT_CONFIG,
   demandAt,
+  energyCost,
+  refillStopsFor,
+  vehicleOf,
   hourAt,
   milestoneBonus,
   paidFee,
@@ -58,6 +61,12 @@ export interface ShiftState {
   nextOfferAt: number;
   /** Kilometres ridden today. Expenses are charged against this. */
   unitsRidden: number;
+  /** What the rider is on today. */
+  vehicleId: string;
+  /** Kilometres of range left in the tank or the battery. */
+  rangeLeft: number;
+  /** Rupees spent on petrol or swaps so far, paid as you go. */
+  energySpent: number;
   duty: DutyState;
   log: string[];
 }
@@ -78,6 +87,10 @@ export interface ShiftSummary {
   undelivered: number;
   /** Minutes actually spent on duty. */
   minutesOnline: number;
+  /** Rupees paid for petrol or battery swaps during the day. */
+  energySpent: number;
+  /** Kilometres of range still in the tank at close. */
+  rangeLeft: number;
   /** Accepted over offered, or null if too few offers to judge. */
   acceptance: number | null;
   /** True when acceptance fell below the platform's floor and voided incentives. */
@@ -96,12 +109,13 @@ export function createShift(
   startNodeId: string = START_NODE_ID,
 ): ShiftState {
   const rng = makeRng(seed);
+  const vehicle = vehicleOf(cfg.startVehicleId, cfg);
   const state: ShiftState = {
     cfg,
     rng,
     clock: 0,
     locationId: node(startNodeId).id,
-    bag: makeBag(),
+    bag: makeBag(vehicle.bagSlots),
     carried: [],
     offers: [],
     completed: [],
@@ -109,6 +123,10 @@ export function createShift(
     seq: 0,
     nextOfferAt: 0,
     unitsRidden: 0,
+    vehicleId: vehicle.id,
+    // Riders start the day with a full tank; topping up mid-shift is the decision.
+    rangeLeft: vehicle.rangeKm,
+    energySpent: 0,
     duty: createDuty(),
     log: [],
   };
@@ -206,12 +224,79 @@ export function travelTo(state: ShiftState, destId: string): void {
     return;
   }
 
-  const minutes = rideMinutes(state, state.locationId, destId);
-  state.unitsRidden += distance(state.locationId, destId);
+  const km = distance(state.locationId, destId);
+  const vehicle = vehicleOf(state.vehicleId, state.cfg);
+  let minutes = rideMinutes(state, state.locationId, destId);
+
+  // Running dry is not a soft lock. You push it, at walking pace, and everyone
+  // waiting on you keeps waiting.
+  if (vehicle.energy !== "none" && km > state.rangeLeft) {
+    const pushed = km - state.rangeLeft;
+    minutes += pushed * state.cfg.pushMinPerKm;
+    state.log.push(
+      `Ran dry ${pushed.toFixed(1)} km short. Pushed it the rest of the way.`,
+    );
+  }
+
+  state.unitsRidden += km;
+  state.rangeLeft = Math.max(0, state.rangeLeft - km);
+  // Charged as it is burnt rather than when it is bought. Over a day the money
+  // is identical, but this way every ride is priced at the moment you decide to
+  // take it — a tank bought yesterday still cost you something today.
+  state.energySpent += energyCost(km, vehicle);
   advance(state, minutes);
   state.locationId = destId;
   state.log.push(`Rode to ${node(destId).name}, ${minutes.toFixed(0)} min.`);
   collectAndDeliver(state);
+}
+
+/** Whether the rider can restore range where they are standing. */
+export function canRefill(state: ShiftState): boolean {
+  const vehicle = vehicleOf(state.vehicleId, state.cfg);
+  if (vehicle.energy === "none") return false;
+  if (state.rangeLeft >= vehicle.rangeKm - 0.01) return false;
+  return refillStopsFor(vehicle, state.cfg).includes(state.locationId);
+}
+
+/**
+ * Fill up, or swap the battery.
+ *
+ * Petrol is metered, so the rider pays for the kilometres they put back. A
+ * battery swap is all-or-nothing — you hand over whatever is left in the old
+ * pack and pay for a whole fresh one, which is why timing a swap matters.
+ */
+export function refill(state: ShiftState): boolean {
+  if (!canRefill(state)) return false;
+
+  const vehicle = vehicleOf(state.vehicleId, state.cfg);
+  const restored = vehicle.rangeKm - state.rangeLeft;
+
+  // The fuel itself is billed per kilometre as it burns, so stopping costs only
+  // time. What the stop really buys is range, and for an electric rider with
+  // seventy kilometres and two stations in the zone, that is the whole game.
+  state.rangeLeft = vehicle.rangeKm;
+  advance(state, vehicle.refillMinutes);
+
+  state.log.push(
+    vehicle.refillIsWholeUnit
+      ? `Swapped the battery at ${node(state.locationId).name}. ${vehicle.refillMinutes} min.`
+      : `Filled up at ${node(state.locationId).name}, ${restored.toFixed(0)} km of range.`,
+  );
+  return true;
+}
+
+/** Nearest place this vehicle can refill, and how far it is. */
+export function nearestRefill(state: ShiftState): { nodeId: string; km: number } | null {
+  const vehicle = vehicleOf(state.vehicleId, state.cfg);
+  const stops = refillStopsFor(vehicle, state.cfg);
+  if (stops.length === 0) return null;
+
+  let best: { nodeId: string; km: number } | null = null;
+  for (const id of stops) {
+    const km = distance(state.locationId, id);
+    if (!best || km < best.km) best = { nodeId: id, km };
+  }
+  return best;
 }
 
 /**
@@ -222,7 +307,8 @@ export function travelTo(state: ShiftState, destId: string): void {
  * matching what the ride actually costs during the evening block.
  */
 export function rideMinutes(state: ShiftState, fromId: string, toId: string): number {
-  return travelMinutes(fromId, toId, BIKE_MIN_PER_KM * trafficAt(state.clock, state.cfg));
+  const vehicle = vehicleOf(state.vehicleId, state.cfg);
+  return travelMinutes(fromId, toId, vehicle.minPerKm * trafficAt(state.clock, state.cfg));
 }
 
 /** Current clock hour, for anything that needs to show the player the time of day. */
@@ -347,11 +433,14 @@ export function endShift(state: ShiftState): ShiftSummary {
   // Riders take orders they know are bad for them precisely to avoid this.
   const voided = incentivesVoid(state.duty, state.cfg);
   const milestones = voided ? 0 : milestoneBonus(onTime, state.cfg);
-  // Measured at 32% of gross, and nearly all of it is distance. Charging it per
-  // unit ridden is what will make the cycle-versus-petrol choice mean something.
-  const expenses = Math.round(
-    state.cfg.dailyExpenses + state.unitsRidden * state.cfg.expensePerKm,
-  );
+  // Energy was already billed kilometre by kilometre as it burnt; what settles
+  // here is the fixed daily cost plus wear, which nobody hands the rider a bill
+  // for but which they pay all the same. Reading upkeep off the vehicle is what
+  // makes the ladder mean anything: petrol runs ₹2.19 a kilometre against ₹0.21
+  // on a swap scooter, and over a 120 km day that gap is the whole argument.
+  const vehicle = vehicleOf(state.vehicleId, state.cfg);
+  const upkeep = state.unitsRidden * vehicle.upkeepPerKm;
+  const expenses = Math.round(state.cfg.dailyExpenses + upkeep + state.energySpent);
 
   // A met guarantee is a floor, not a bonus: it tops earnings up to the promised
   // number and pays nothing if you already cleared it. Break any term and it is
@@ -381,6 +470,8 @@ export function endShift(state: ShiftState): ShiftSummary {
     undelivered: state.dropped.length,
     unitsRidden: state.unitsRidden,
     minutesOnline: state.duty.minutesOnline,
+    energySpent: state.energySpent,
+    rangeLeft: state.rangeLeft,
     acceptance: acceptanceRate(state.duty, state.cfg),
     incentivesVoided: voided,
     slot,

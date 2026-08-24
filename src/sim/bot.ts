@@ -1,10 +1,14 @@
 import type { GameConfig } from "./config.js";
+import { vehicleOf } from "./config.js";
 import { commit } from "./duty.js";
 import {
   accept,
   createShift,
   endShift,
   isOver,
+  canRefill,
+  nearestRefill,
+  refill,
   rideMinutes,
   startDuty,
   stopDuty,
@@ -146,6 +150,19 @@ export function runShift(
         if (state.carried.length >= capacity) break;
         if (policy === "selective" && !worthTaking(state, offer, cfg)) continue;
         accept(state, offer.id);
+      }
+    }
+
+    // Top up before it becomes a walk. A rider who ignores the gauge on a
+    // seventy-kilometre battery spends the evening pushing.
+    if (canRefill(state)) {
+      refill(state);
+    } else {
+      const vehicle = vehicleOf(state.vehicleId, cfg);
+      const depot = nearestRefill(state);
+      if (vehicle.energy !== "none" && depot && state.rangeLeft < depot.km + vehicle.rangeKm * 0.25) {
+        travelTo(state, depot.nodeId);
+        refill(state);
       }
     }
 

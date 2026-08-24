@@ -1,7 +1,8 @@
 import { node } from "../sim/city.js";
-import { hourAt, nextMilestone, type GameConfig } from "../sim/config.js";
+import { energyCost, hourAt, nextMilestone, vehicleOf, type GameConfig } from "../sim/config.js";
 import { minutesOnlineAt } from "../sim/duty.js";
-import { canAccept, endShift, rideMinutes, type ShiftState } from "../sim/shift.js";
+import { distance } from "../sim/city.js";
+import { canAccept, canRefill, endShift, nearestRefill, rideMinutes, type ShiftState } from "../sim/shift.js";
 import { duration, esc, mins, rupees, urgency } from "./format.js";
 import { routeStack } from "./route.js";
 import { estimate, VERDICT_LABEL } from "./verdict.js";
@@ -59,6 +60,38 @@ export function earningsBlock(state: ShiftState, cfg: GameConfig): string {
     </div>`;
 }
 
+/**
+ * The range gauge. Electric riders need this far more than petrol ones: seventy
+ * kilometres between swaps, and only two stations in the zone.
+ */
+export function fuelBlock(state: ShiftState, cfg: GameConfig): string {
+  const vehicle = vehicleOf(state.vehicleId, cfg);
+  if (vehicle.energy === "none") return "";
+
+  const frac = state.rangeLeft / vehicle.rangeKm;
+  const low = frac <= cfg.lowRangeWarning;
+  const stop = nearestRefill(state);
+  const unreachable = stop !== null && stop.km > state.rangeLeft;
+
+  return `
+    <div class="fuel ${low ? "low" : ""} ${unreachable ? "stranded" : ""}">
+      <div class="fuel-head">
+        <b>${Math.round(state.rangeLeft)} km left</b>
+        <span>${esc(vehicle.name)} · ${rupees(state.energySpent)} spent today</span>
+      </div>
+      <div class="bar"><i style="width:${Math.max(2, frac * 100)}%"></i></div>
+      ${
+        stop
+          ? `<div class="fuel-foot">${
+              unreachable
+                ? `Nearest ${vehicle.refillIsWholeUnit ? "swap" : "pump"} is ${km(stop.km)} away — further than you can ride.`
+                : `Nearest ${vehicle.refillIsWholeUnit ? "swap" : "pump"}: ${esc(node(stop.nodeId).name)}, ${km(stop.km)}`
+            }</div>`
+          : ""
+      }
+    </div>`;
+}
+
 export function incentiveBlock(state: ShiftState, cfg: GameConfig): string {
   const done = state.completed.filter((c) => !c.late).length;
   const next = nextMilestone(done, cfg);
@@ -83,6 +116,36 @@ export function incentiveBlock(state: ShiftState, cfg: GameConfig): string {
     </div>`;
 }
 
+/**
+ * What this trip burns, and what is left of the fee once it has.
+ *
+ * A fee is meaningless without the fuel behind it — a ₹44 order that costs ₹18
+ * to reach is a worse deal than a ₹30 one next door, and the app never tells a
+ * real rider that. Petrol runs about ₹2.19 a kilometre against ₹0.21 on a swap
+ * scooter, which is the entire argument for the vehicle ladder.
+ */
+function fuelLine(
+  state: ShiftState,
+  cfg: GameConfig,
+  pickupId: string,
+  dropId: string,
+  fee: number,
+): string {
+  const vehicle = vehicleOf(state.vehicleId, cfg);
+  if (vehicle.energy === "none") return "";
+
+  const tripKm = distance(state.locationId, pickupId) + distance(pickupId, dropId);
+  const cost = energyCost(tripKm, vehicle);
+  const net = fee - cost;
+  const thin = net < fee * 0.6;
+
+  return `
+    <div class="fuelline ${thin ? "thin" : ""}">
+      <span>Fuel for this trip</span>
+      <span class="fuelnums">−${rupees(cost)} · <b>${rupees(net)} left</b></span>
+    </div>`;
+}
+
 function offerCard(state: ShiftState, cfg: GameConfig, orderId: string): string {
   const order = state.offers.find((o) => o.id === orderId);
   if (!order) return "";
@@ -104,6 +167,7 @@ function offerCard(state: ShiftState, cfg: GameConfig, orderId: string): string 
         <b>${rupees(order.fee)}</b>
         <span>${km(order.distance)} · ${SLOT_NEED[order.temp] ?? ""}</span>
       </div>
+      ${fuelLine(state, cfg, order.pickupId, order.dropId, order.fee)}
 
       ${routeStack(order.pickupId, order.dropId, {
         pickupNote: `Ready in about ${mins(order.shownPrep)}`,
@@ -205,6 +269,19 @@ export function actionBlock(state: ShiftState): string {
   }
 
   const best = [...stops.entries()].sort((a, b) => a[1] - b[1])[0];
+  const vehicle = vehicleOf(state.vehicleId, state.cfg);
+
+  if (canRefill(state)) {
+    const restored = vehicle.rangeKm - state.rangeLeft;
+    const billed = vehicle.refillIsWholeUnit ? vehicle.rangeKm : restored;
+    return `<div class="sheet-action">
+      <button class="go" data-refill="1">
+        <span class="golabel">${vehicle.refillIsWholeUnit ? "Swap battery" : "Fill up"}</span>
+        <span class="gometa">${rupees(energyCost(billed, vehicle))} · ${vehicle.refillMinutes} min · back to ${Math.round(vehicle.rangeKm)} km</span>
+      </button>
+      <button class="wait" data-wait="15">Skip</button>
+    </div>`;
+  }
 
   if (!best) {
     return `<div class="sheet-action">
@@ -223,14 +300,19 @@ export function actionBlock(state: ShiftState): string {
       <span class="golabel">Ride to ${esc(node(id).name)}</span>
       <span class="gometa">${mins(rideMinutes(state, state.locationId, id))}${
         serves > 1 ? ` · ${serves} orders` : ""
-      } · ${slack < 0 ? "late" : `${mins(slack)} spare`}</span>
+      } · ${slack < 0 ? "late" : `${mins(slack)} spare`}${
+        vehicle.energy === "none"
+          ? ""
+          : ` · ${rupees(energyCost(distance(state.locationId, id), vehicle))} fuel`
+      }</span>
     </button>
     <button class="wait" data-wait="15">Wait</button>
   </div>`;
 }
 
-export function summaryScreen(state: ShiftState): string {
+export function summaryScreen(state: ShiftState, cfg: GameConfig): string {
   const s = endShift(state);
+  const vehicle = vehicleOf(state.vehicleId, cfg);
 
   return `
     <div class="summary">
@@ -258,8 +340,11 @@ export function summaryScreen(state: ShiftState): string {
               )}%</em></td><td>₹0</td></tr>`
             : ""
         }
-        <tr class="cost"><td>Fuel, data, wear <em>${km(s.unitsRidden)}</em></td>
-            <td>−${rupees(s.expenses)}</td></tr>
+        <tr class="cost"><td>${
+          vehicle.refillIsWholeUnit ? "Battery swaps" : "Petrol"
+        } <em>${km(s.unitsRidden)} ridden</em></td><td>−${rupees(s.energySpent)}</td></tr>
+        <tr class="cost"><td>Wear, data, the rest</td>
+            <td>−${rupees(s.expenses - s.energySpent)}</td></tr>
       </table>
 
       <p class="waited">

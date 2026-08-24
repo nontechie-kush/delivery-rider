@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { findSlot, fits, load, makeBag, unload, used } from "../src/sim/bag.js";
+import { DEFAULT_CONFIG, vehicleOf } from "../src/sim/config.js";
+
+/** The starting scooter's layout: two hot, one cold, two flexible. */
+const SCOOTER = vehicleOf(DEFAULT_CONFIG.startVehicleId, DEFAULT_CONFIG).bagSlots;
 
 describe("bag", () => {
   it("starts empty with five slots", () => {
-    const bag = makeBag();
+    const bag = makeBag(SCOOTER);
     expect(bag).toHaveLength(5);
     expect(used(bag)).toBe(0);
   });
@@ -35,7 +39,7 @@ describe("bag", () => {
    * cannot carry three hot orders at once, so a run of them forces a choice.
    */
   it("cannot carry more than two hot orders in the starting bag", () => {
-    const bag = makeBag();
+    const bag = makeBag(SCOOTER);
     expect(load(bag, "HOT", "a")).toBe(true);
     expect(load(bag, "HOT", "b")).toBe(true);
     expect(load(bag, "HOT", "c")).toBe(true); // spills into an ANY slot
@@ -45,7 +49,7 @@ describe("bag", () => {
   });
 
   it("keeps ANY slots free for orders with nowhere else to go", () => {
-    const bag = makeBag();
+    const bag = makeBag(SCOOTER);
     load(bag, "HOT", "a");
     load(bag, "COLD", "b");
     // Both specialised slots used their own kind, leaving ANY open.
@@ -54,7 +58,7 @@ describe("bag", () => {
   });
 
   it("frees the slot on unload", () => {
-    const bag = makeBag();
+    const bag = makeBag(SCOOTER);
     load(bag, "COLD", "a");
     expect(used(bag)).toBe(1);
     expect(unload(bag, "a")).toBe(true);
@@ -62,6 +66,6 @@ describe("bag", () => {
   });
 
   it("reports failure when unloading something it is not carrying", () => {
-    expect(unload(makeBag(), "nope")).toBe(false);
+    expect(unload(makeBag(SCOOTER), "nope")).toBe(false);
   });
 });

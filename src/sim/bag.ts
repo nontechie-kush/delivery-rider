@@ -1,4 +1,3 @@
-import { DEFAULT_CONFIG } from "./config.js";
 import type { Slot, Temp } from "./types.js";
 
 /**
@@ -7,10 +6,11 @@ import type { Slot, Temp } from "./types.js";
  * physically fit alongside what they are already carrying — size, fragility, and
  * hot-versus-cold separation.
  *
- * Starting layout: two hot, one cold, two flexible. A run of hot orders cannot all
- * be taken, which is exactly when the player has to choose.
+ * The layout comes from the vehicle: a scooter carries two hot, one cold and two
+ * flexible, an e-cycle only three slots. A run of hot orders cannot all be taken,
+ * which is exactly when the player has to choose.
  */
-export function makeBag(kinds: readonly Slot["kind"][] = DEFAULT_CONFIG.bagSlots): Slot[] {
+export function makeBag(kinds: readonly Slot["kind"][]): Slot[] {
   return kinds.map((kind) => ({ kind, orderId: null }));
 }
 

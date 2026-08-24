@@ -9,6 +9,7 @@ import {
   fmt,
   idle,
   isOver,
+  refill,
   reject,
   startDuty,
   travelTo,
@@ -23,6 +24,7 @@ import {
   commitmentBlock,
   earningsBlock,
   feedBlock,
+  fuelBlock,
   incentiveBlock,
   offersBlock,
   startScreen,
@@ -159,7 +161,7 @@ function render(): void {
   }
 
   if (phase === "done") {
-    app.innerHTML = `<div class="statusbar"><span class="brand">NOW <em>partner</em></span></div>${summaryScreen(state)}`;
+    app.innerHTML = `<div class="statusbar"><span class="brand">NOW <em>partner</em></span></div>${summaryScreen(state, cfg)}`;
     return;
   }
 
@@ -175,6 +177,7 @@ function render(): void {
       <button class="grabber" data-sheet="cycle" aria-label="Resize panel"><i></i></button>
       <div class="sheet-scroll">
         ${earningsBlock(state, cfg)}
+        ${fuelBlock(state, cfg)}
         ${commitmentBlock(state, cfg)}
         ${incentiveBlock(state, cfg)}
         ${feedBlock(state)}
@@ -200,7 +203,7 @@ app.addEventListener("click", (event) => {
   if (!(target instanceof Element)) return;
 
   const hit = target.closest<HTMLElement>(
-    "[data-accept],[data-reject],[data-go],[data-wait],[data-end],[data-restart],[data-sheet],[data-begin],[data-slot]",
+    "[data-accept],[data-reject],[data-go],[data-wait],[data-end],[data-restart],[data-sheet],[data-begin],[data-slot],[data-refill]",
   );
   if (!hit) return;
 
@@ -229,7 +232,8 @@ app.addEventListener("click", (event) => {
     travelTo(state, d["go"]);
     // Riding is the moment the map matters, so drop the sheet out of the way.
     sheet = "peek";
-  } else if (d["wait"]) idle(state, Number(d["wait"]));
+  } else if (d["refill"]) refill(state);
+  else if (d["wait"]) idle(state, Number(d["wait"]));
   else if (d["end"]) phase = "done";
   else if (d["restart"]) {
     phase = "start";

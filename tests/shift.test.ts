@@ -215,9 +215,10 @@ describe("endShift", () => {
     const sum = endShift(s);
     expect(sum.ordersDelivered).toBe(1);
     expect(sum.milestones).toBe(0);
-    // Fixed daily cost plus fuel and wear over the distance actually covered.
+    // Fixed daily cost, plus energy billed as it burnt, plus wear on the vehicle.
+    const vehicle = E.vehicles.find((v) => v.id === E.startVehicleId)!;
     expect(sum.expenses).toBe(
-      Math.round(E.dailyExpenses + sum.unitsRidden * E.expensePerKm),
+      Math.round(E.dailyExpenses + sum.unitsRidden * vehicle.upkeepPerKm + sum.energySpent),
     );
     expect(sum.expenses).toBeGreaterThan(E.dailyExpenses);
     expect(sum.net).toBe(sum.fees + sum.milestones - sum.expenses);
