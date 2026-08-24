@@ -598,3 +598,57 @@ h2 .slots { display: flex; gap: 3px; margin-left: 2px; }
 .fuel.stranded .bar i { background: var(--red); }
 .fuel-foot { font-size: 11.5px; color: var(--dimmer); }
 .fuel.stranded .fuel-foot { color: var(--red); }
+
+/* ------------------------------------------------------------------ ride */
+
+/* The road takes the whole screen. Controls sit in the bottom corners because
+   that is where thumbs are, and lane-splitting needs both of them. */
+.ridestage { position: absolute; inset: 0; background: #0d1a24; }
+.ridewrap { position: absolute; inset: 0; overflow: hidden; }
+.ridecanvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+.ridehud {
+  position: absolute; top: 0; left: 0; right: 0;
+  display: flex; justify-content: space-between; align-items: flex-start;
+  padding: 14px 16px; pointer-events: none;
+  background: linear-gradient(to bottom, rgba(6,10,12,.75), transparent);
+}
+.ridedest span { display: block; font-size: 10.5px; letter-spacing: .11em; text-transform: uppercase; color: rgba(255,255,255,.55); }
+.ridedest b { display: block; font-size: 18px; font-weight: 700; letter-spacing: -.02em; }
+.ridebag { font-size: 12px; color: rgba(255,255,255,.65); background: rgba(6,10,12,.6); padding: 5px 10px; border-radius: 12px; }
+
+.ridemeter {
+  position: absolute; top: 0; left: 0; right: 0; height: 3px;
+  background: rgba(255,255,255,.12);
+}
+.ridemeter i { display: block; height: 100%; background: var(--brand); }
+
+.ridecontrols {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  display: flex; gap: 10px; padding: 14px 14px calc(18px + env(safe-area-inset-bottom, 0px));
+  touch-action: none;
+}
+.rc {
+  border: 1px solid rgba(255,255,255,.16); background: rgba(10,14,12,.55);
+  border-radius: 12px; height: 74px; -webkit-tap-highlight-color: transparent;
+  backdrop-filter: blur(3px); cursor: pointer;
+}
+.rc:active { background: rgba(255,255,255,.16); }
+.rc.left, .rc.right { flex: 1; position: relative; }
+/* Chevrons, drawn rather than shipped as glyphs so they scale cleanly. */
+.rc.left::after, .rc.right::after {
+  content: ""; position: absolute; top: 50%; left: 50%;
+  width: 15px; height: 15px; margin: -8px 0 0 -8px;
+  border-left: 3px solid rgba(255,255,255,.8); border-bottom: 3px solid rgba(255,255,255,.8);
+}
+.rc.left::after { transform: rotate(45deg); }
+.rc.right::after { transform: rotate(-135deg); }
+.rc.gas { flex: 1.5; background: rgba(0,227,155,.9); border-color: transparent; color: #062119; }
+.rc.gas:active { background: #2af0af; }
+.rc.gas span { font-size: 17px; font-weight: 800; letter-spacing: .08em; }
+
+.ridehint {
+  position: absolute; left: 0; right: 0; bottom: 104px;
+  text-align: center; font-size: 11.5px; color: rgba(255,255,255,.45);
+  pointer-events: none;
+}

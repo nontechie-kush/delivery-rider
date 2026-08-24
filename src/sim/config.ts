@@ -167,6 +167,17 @@ export interface GameConfig {
   /** Minutes per kilometre pushed when the rider runs dry away from a stop. */
   pushMinPerKm: number;
 
+  /* --------------------------------------------------------- the ride */
+  /**
+   * Real seconds of riding per kilometre, and the floor and ceiling around it.
+   * Rides have to stay short: the ride exists to make the decision cost
+   * something, not to become the game. A hop is a few seconds, a cross-town run
+   * under a minute.
+   */
+  rideSecondsPerKm: number;
+  rideSecondsMin: number;
+  rideSecondsMax: number;
+
   /* ------------------------------------------------------- how it reads */
   /** Minutes the fit estimate assumes each order already in the bag costs. */
   queueCostPerOrder: number;
@@ -299,6 +310,10 @@ export const DEFAULT_CONFIG: GameConfig = {
   // Pushing a dead two-wheeler is about walking pace.
   pushMinPerKm: 13,
 
+
+  rideSecondsPerKm: 4.2,
+  rideSecondsMin: 6,
+  rideSecondsMax: 40,
 
   queueCostPerOrder: 17,
   verdictBands: { easy: 0.45, tight: 0.7, risky: 0.92 },

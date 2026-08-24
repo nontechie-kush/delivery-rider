@@ -218,7 +218,7 @@ export function reject(state: ShiftState, id: string): boolean {
  * orders waiting there (standing around until they are actually ready) and hand
  * over any orders destined for it.
  */
-export function travelTo(state: ShiftState, destId: string): void {
+export function travelTo(state: ShiftState, destId: string, extraMinutes = 0): void {
   if (destId === state.locationId) {
     collectAndDeliver(state);
     return;
@@ -226,7 +226,10 @@ export function travelTo(state: ShiftState, destId: string): void {
 
   const km = distance(state.locationId, destId);
   const vehicle = vehicleOf(state.vehicleId, state.cfg);
-  let minutes = rideMinutes(state, state.locationId, destId);
+  // Whatever the ride itself cost — a spill, a bus that stopped without warning
+  // — is added to the journey. The sim stays authoritative over the clock; the
+  // ride only tells it how badly the journey went.
+  let minutes = rideMinutes(state, state.locationId, destId) + extraMinutes;
 
   // Running dry is not a soft lock. You push it, at walking pace, and everyone
   // waiting on you keeps waiting.
@@ -246,7 +249,11 @@ export function travelTo(state: ShiftState, destId: string): void {
   state.energySpent += energyCost(km, vehicle);
   advance(state, minutes);
   state.locationId = destId;
-  state.log.push(`Rode to ${node(destId).name}, ${minutes.toFixed(0)} min.`);
+  state.log.push(
+    extraMinutes > 0.5
+      ? `Rode to ${node(destId).name}, ${minutes.toFixed(0)} min — ${extraMinutes.toFixed(0)} of it picking myself up.`
+      : `Rode to ${node(destId).name}, ${minutes.toFixed(0)} min.`,
+  );
   collectAndDeliver(state);
 }
 

@@ -1,6 +1,6 @@
 import "./style.css";
-import { node } from "./sim/city.js";
-import { DEFAULT_CONFIG } from "./sim/config.js";
+import { distance, node } from "./sim/city.js";
+import { DEFAULT_CONFIG, trafficAt } from "./sim/config.js";
 import { commit, minutesOnlineAt } from "./sim/duty.js";
 import {
   accept,
@@ -17,6 +17,7 @@ import {
 } from "./sim/shift.js";
 import { duration, esc, rupees } from "./ui/format.js";
 import { renderMap } from "./ui/map.js";
+import { runRide } from "./ride/screen.js";
 import { locateMessage, locateRider } from "./ui/locate.js";
 import {
   actionBlock,
@@ -48,7 +49,7 @@ if (!app) throw new Error("#app not found");
 type SheetState = "peek" | "half" | "full";
 const SHEET_ORDER: SheetState[] = ["peek", "half", "full"];
 
-type Phase = "start" | "working" | "done";
+type Phase = "start" | "working" | "riding" | "done";
 
 let state: ShiftState = createShift(Math.floor(Math.random() * 1e9), cfg);
 let phase: Phase = "start";
@@ -160,6 +161,14 @@ function render(): void {
     return;
   }
 
+  if (phase === "riding") {
+    // Only paint the stage once; the ride owns it from then on.
+    if (!app.querySelector(".ridestage")) {
+      app.innerHTML = `<div class="ridestage"></div>`;
+    }
+    return;
+  }
+
   if (phase === "done") {
     app.innerHTML = `<div class="statusbar"><span class="brand">NOW <em>partner</em></span></div>${summaryScreen(state, cfg)}`;
     return;
@@ -190,6 +199,58 @@ function render(): void {
 
   const scroller = app.querySelector(".sheet-scroll");
   if (scroller && scrolled > 0) scroller.scrollTop = scrolled;
+}
+
+/**
+ * Ride there, then arrive.
+ *
+ * The ride is a UI layer over a sim that stays authoritative: it plays out, and
+ * what it cost in spills is handed back to travelTo as extra minutes. Everything
+ * downstream — deadlines, fuel, the guarantee — is worked out by the simulation
+ * exactly as before.
+ */
+async function rideTo(destId: string): Promise<void> {
+  const km = distance(state.locationId, destId);
+  const seconds = Math.max(
+    cfg.rideSecondsMin,
+    Math.min(cfg.rideSecondsMax, km * cfg.rideSecondsPerKm),
+  );
+
+  // Rush hour puts more between you and the drop, and a full bag handles worse.
+  const density = Math.min(1, (trafficAt(state.clock, cfg) - 0.8) / 0.6);
+  const load = state.carried.length / state.bag.length;
+
+  phase = "riding";
+  render();
+
+  const stage = app?.querySelector<HTMLElement>(".ridestage");
+  if (!stage) {
+    // No canvas to ride on — never strand the player, just travel.
+    travelTo(state, destId);
+    phase = "working";
+    finishIfOver();
+    render();
+    return;
+  }
+
+  const { promise } = runRide(
+    stage,
+    {
+      seconds,
+      density: Math.max(0, density),
+      load,
+      seed: Math.floor(Math.random() * 1e9),
+    },
+    { to: node(destId).name, orders: state.carried.length },
+  );
+
+  const result = await promise;
+  travelTo(state, destId, result.minutesLost);
+  phase = "working";
+  sheet = "peek";
+  preview = null;
+  finishIfOver();
+  render();
 }
 
 function finishIfOver(): void {
@@ -226,13 +287,14 @@ app.addEventListener("click", (event) => {
     return;
   }
 
+  if (d["go"]) {
+    void rideTo(d["go"]);
+    return;
+  }
+
   if (d["accept"]) accept(state, d["accept"]);
   else if (d["reject"]) reject(state, d["reject"]);
-  else if (d["go"]) {
-    travelTo(state, d["go"]);
-    // Riding is the moment the map matters, so drop the sheet out of the way.
-    sheet = "peek";
-  } else if (d["refill"]) refill(state);
+  else if (d["refill"]) refill(state);
   else if (d["wait"]) idle(state, Number(d["wait"]));
   else if (d["end"]) phase = "done";
   else if (d["restart"]) {
@@ -299,10 +361,7 @@ app.addEventListener("keydown", (event) => {
   const go = target.closest<HTMLElement>("[data-go]")?.dataset["go"];
   if (!go) return;
   event.preventDefault();
-  travelTo(state, go);
-  sheet = "peek";
-  finishIfOver();
-  render();
+  void rideTo(go);
 });
 
 void findRider();
