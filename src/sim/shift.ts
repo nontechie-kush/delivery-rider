@@ -17,6 +17,8 @@ import {
   goOnline,
   incentivesVoid,
   recordAccept,
+  recordDelivery,
+  recordIgnored,
   acceptanceRate,
   recordReject,
   settleSlot,
@@ -136,6 +138,14 @@ function refreshOffers(state: ShiftState): void {
       state.cfg,
       demandAt(state.nextOfferAt, state.cfg),
     );
+  }
+  // An offer that timed out while the rider was standing idle with room in the
+  // bag is a refusal, not bad luck. Being too busy to catch one is not.
+  const expired = state.offers.filter((o) => o.expiresAt <= state.clock);
+  if (expired.length > 0 && state.duty.online && state.carried.length === 0) {
+    for (const o of expired) {
+      if (fits(state.bag, o.temp)) recordIgnored(state.duty, state.clock, state.cfg);
+    }
   }
   state.offers = state.offers.filter((o) => o.expiresAt > state.clock);
 }
@@ -283,6 +293,7 @@ function collectAndDeliver(state: ShiftState): void {
       waitShown: c.order.shownPrep,
     });
 
+    recordDelivery(state.duty, state.clock, state.cfg);
     unload(state.bag, c.order.id);
     state.log.push(
       late

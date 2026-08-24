@@ -30,6 +30,8 @@ export interface Commitment {
   /** Minutes of the window actually spent online. */
   minutesPresent: number;
   rejections: number;
+  /** Deliveries completed inside the window. */
+  delivered: number;
 }
 
 export interface DutyState {
@@ -75,11 +77,11 @@ export function commit(duty: DutyState, slotId: string, clock: number, cfg: Game
   if (duty.commitment) return false;
   if (!bookableSlots(clock, cfg).some((s) => s.id === slotId)) return false;
 
-  duty.commitment = { slotId, brokenReason: null, minutesPresent: 0, rejections: 0 };
+  duty.commitment = { slotId, brokenReason: null, minutesPresent: 0, rejections: 0, delivered: 0 };
   const slot = cfg.slots.find((s) => s.id === slotId);
   if (slot) {
     duty.notices.push(
-      `Booked ${slot.label}, ${slot.fromHour}:00–${slot.toHour}:00. ₹${slot.guarantee} guaranteed if you stay online the whole window and reject no more than ${slot.rejectionsAllowed}.`,
+      `Booked ${slot.label}, ${slot.fromHour}:00–${slot.toHour}:00. ₹${slot.guarantee} guaranteed for ${slot.minDeliveries} deliveries, staying online the whole window, and no more than ${slot.rejectionsAllowed} rejection.`,
     );
   }
   return true;
@@ -178,6 +180,39 @@ export function recordReject(duty: DutyState, clock: number, cfg: GameConfig): v
   }
 }
 
+/** Counts a delivery toward a booked window, if it happened inside one. */
+export function recordDelivery(duty: DutyState, clock: number, cfg: GameConfig): void {
+  const slot = committedSlot(duty, cfg);
+  if (!slot || !duty.commitment) return;
+  const hour = hourAt(clock, cfg);
+  if (hour < slot.fromHour || hour >= slot.toHour) return;
+  duty.commitment.delivered += 1;
+}
+
+/**
+ * An offer that expired while the rider was standing idle with room in the bag.
+ *
+ * Real dispatch pushes one order at a time with a countdown, and ignoring it is
+ * declining it. Our queue lets several sit at once, so this only bites when the
+ * rider genuinely had nothing on and space to take it — being too busy to catch
+ * an offer is not a refusal, but standing still while work goes past is.
+ */
+export function recordIgnored(duty: DutyState, clock: number, cfg: GameConfig): void {
+  duty.offersRejected += 1;
+  const slot = committedSlot(duty, cfg);
+  if (!slot || !duty.commitment) return;
+  const hour = hourAt(clock, cfg);
+  if (hour < slot.fromHour || hour >= slot.toHour) return;
+
+  duty.commitment.rejections += 1;
+  if (duty.commitment.rejections > slot.rejectionsAllowed) {
+    breakCommitment(
+      duty,
+      `you let ${duty.commitment.rejections} orders go past during ${slot.label}; ${slot.rejectionsAllowed} was the limit.`,
+    );
+  }
+}
+
 /** Accepted over decided. Null until enough decisions have been made to judge. */
 export function acceptanceRate(duty: DutyState, cfg: GameConfig): number | null {
   const decided = duty.offersAccepted + duty.offersRejected;
@@ -203,6 +238,8 @@ export interface SlotOutcome {
   /** Minutes of the window the rider was actually present for. */
   present: number;
   required: number;
+  /** Deliveries completed inside the window. */
+  delivered: number;
 }
 
 /**
@@ -219,7 +256,19 @@ export function settleSlot(duty: DutyState, clock: number, cfg: GameConfig): Slo
   const present = duty.commitment.minutesPresent;
 
   if (duty.commitment.brokenReason) {
-    return { slot, met: false, reason: duty.commitment.brokenReason, present, required };
+    return { slot, met: false, reason: duty.commitment.brokenReason, present, required, delivered: duty.commitment.delivered };
+  }
+
+  // The main term, and the one that makes booking a bet rather than a freebie.
+  if (duty.commitment.delivered < slot.minDeliveries) {
+    return {
+      slot,
+      met: false,
+      reason: `you delivered ${duty.commitment.delivered} of the ${slot.minDeliveries} the window required.`,
+      present,
+      required,
+      delivered: duty.commitment.delivered,
+    };
   }
 
   // A minute of slack, so arriving exactly on the hour is not punished by
@@ -231,8 +280,9 @@ export function settleSlot(duty: DutyState, clock: number, cfg: GameConfig): Slo
       reason: `you were online for ${Math.round(present)} of the ${required} minutes.`,
       present,
       required,
+      delivered: duty.commitment.delivered,
     };
   }
 
-  return { slot, met: true, reason: null, present, required };
+  return { slot, met: true, reason: null, present, required, delivered: duty.commitment.delivered };
 }

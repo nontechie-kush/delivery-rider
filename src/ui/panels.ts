@@ -244,6 +244,20 @@ export function summaryScreen(state: ShiftState): string {
         }</td><td>${rupees(s.fees)}</td></tr>
         <tr><td>Incentive · ${s.ordersOnTime} on time</td>
             <td>${s.milestones > 0 ? rupees(s.milestones) : "—"}</td></tr>
+        ${
+          s.slot
+            ? `<tr><td>${esc(s.slot.slot.label)} guarantee <em>${
+                s.slot.met ? "terms met" : esc(s.slot.reason ?? "")
+              }</em></td><td>${s.guaranteeTopUp > 0 ? rupees(s.guaranteeTopUp) : "—"}</td></tr>`
+            : ""
+        }
+        ${
+          s.incentivesVoided
+            ? `<tr class="void"><td>Incentives void <em>acceptance ${Math.round(
+                (s.acceptance ?? 0) * 100,
+              )}%</em></td><td>₹0</td></tr>`
+            : ""
+        }
         <tr class="cost"><td>Fuel, data, wear <em>${km(s.unitsRidden)}</em></td>
             <td>−${rupees(s.expenses)}</td></tr>
       </table>
@@ -284,8 +298,9 @@ export function startScreen(
         <span class="slotbody">
           <b>${esc(s.label)}</b>
           <span class="slothours">${s.fromHour}:00–${s.toHour}:00</span>
-          <span class="slotterms">Stay online the whole window, reject at most
-            ${s.rejectionsAllowed}. Miss either and it pays nothing.</span>
+          <span class="slotterms">Deliver ${s.minDeliveries}, stay online the whole
+            window, reject at most ${s.rejectionsAllowed}. Miss any one and it
+            pays nothing at all.</span>
         </span>
         <span class="slotpay">${rupees(s.guarantee)}</span>
       </label>`,
@@ -354,22 +369,37 @@ export function commitmentBlock(state: ShiftState, cfg: GameConfig): string {
   const broken = c.brokenReason !== null;
   const rejectsLeft = slot.rejectionsAllowed - c.rejections;
 
+  const short = slot.minDeliveries - c.delivered;
+  const done = short <= 0;
+
   const status = broken
     ? `<span class="cmt-dead">Lost — ${esc(c.brokenReason ?? "")}</span>`
     : before
       ? `<span class="cmt-wait">Starts at ${slot.fromHour}:00</span>`
-      : after
-        ? `<span class="cmt-ok">Window closed</span>`
-        : `<span class="cmt-live">Live until ${slot.toHour}:00 · ${
-            rejectsLeft > 0 ? `${rejectsLeft} rejection left` : "no rejections left"
-          }</span>`;
+      : after && !done
+        ? `<span class="cmt-dead">Window closed ${short} short. Pays nothing.</span>`
+        : after
+          ? `<span class="cmt-ok">Window closed. Terms met.</span>`
+          : `<span class="cmt-live">Until ${slot.toHour}:00 · ${
+              rejectsLeft > 0 ? `${rejectsLeft} rejection left` : "no rejections left"
+            }</span>`;
+
+  // The delivery count is the term that actually bites, so it gets the bar.
+  // Being one short pays exactly the same as never showing up.
+  const pct = Math.min(100, (c.delivered / slot.minDeliveries) * 100);
 
   return `
-    <div class="commitment ${broken ? "dead" : after ? "done" : before ? "waiting" : "live"}">
+    <div class="commitment ${broken || (after && !done) ? "dead" : after ? "done" : before ? "waiting" : "live"}">
       <div class="cmt-head">
         <b>${esc(slot.label)}</b>
-        <span class="cmt-pay">${broken ? "₹0" : rupees(slot.guarantee)}</span>
+        <span class="cmt-pay">${broken || (after && !done) ? "₹0" : rupees(slot.guarantee)}</span>
       </div>
+      <div class="cmt-need">
+        <span>${done ? "All " : ""}${c.delivered} of ${slot.minDeliveries} delivered${
+          done ? "" : ` · ${short} to go`
+        }</span>
+      </div>
+      <div class="bar"><i style="width:${Math.max(3, pct)}%"></i></div>
       <div class="cmt-status">${status}</div>
     </div>`;
 }

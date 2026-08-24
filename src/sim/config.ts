@@ -42,6 +42,15 @@ export interface SlotConfig {
    * roughly one — Swiggy voids the minimum guarantee on the second.
    */
   rejectionsAllowed: number;
+  /**
+   * Deliveries that must actually be completed inside the window.
+   *
+   * This is the main term and the cruellest one. Swiggy requires 23 completed
+   * orders to unlock ₹845; finish 22 and you take home ₹350. Without it a rider
+   * could book a window, stand still for four hours and collect the guarantee
+   * for doing nothing — which is precisely what happened before this existed.
+   */
+  minDeliveries: number;
 }
 
 export interface PlaceBehaviour {
@@ -190,9 +199,9 @@ export const DEFAULT_CONFIG: GameConfig = {
    * bad for them.
    */
   slots: [
-    { id: "morning", label: "Morning", fromHour: 7, toHour: 11, guarantee: 420, rejectionsAllowed: 1 },
-    { id: "lunch", label: "Lunch rush", fromHour: 12, toHour: 16, guarantee: 640, rejectionsAllowed: 1 },
-    { id: "evening", label: "Dinner rush", fromHour: 19, toHour: 23, guarantee: 880, rejectionsAllowed: 1 },
+    { id: "morning", label: "Morning", fromHour: 7, toHour: 11, guarantee: 420, rejectionsAllowed: 1, minDeliveries: 6 },
+    { id: "lunch", label: "Lunch rush", fromHour: 12, toHour: 16, guarantee: 640, rejectionsAllowed: 1, minDeliveries: 10 },
+    { id: "evening", label: "Dinner rush", fromHour: 19, toHour: 23, guarantee: 880, rejectionsAllowed: 1, minDeliveries: 12 },
   ],
   minAcceptanceRate: 0.8,
   acceptanceGracePeriod: 5,

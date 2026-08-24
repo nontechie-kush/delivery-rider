@@ -9,6 +9,8 @@ import {
   goOnline,
   incentivesVoid,
   recordAccept,
+  recordDelivery,
+  recordIgnored,
   recordReject,
   settleSlot,
 } from "../src/sim/duty.js";
@@ -16,11 +18,17 @@ import {
 const at = (hour: number) => (hour - C.dayStartHour) * 60;
 const evening = C.slots.find((s) => s.id === "evening")!;
 
-/** A rider who booked the evening slot and showed up for all of it. */
+/** Deliveries completed inside the window. */
+function deliver(duty: ReturnType<typeof createDuty>, count: number) {
+  for (let i = 0; i < count; i++) recordDelivery(duty, at(evening.fromHour) + 30, C);
+}
+
+/** A rider who booked the evening slot, showed up for all of it, and worked. */
 function goodDay() {
   const duty = createDuty();
   commit(duty, evening.id, at(9), C);
   goOnline(duty, at(evening.fromHour));
+  deliver(duty, evening.minDeliveries);
   goOffline(duty, at(evening.toHour), C);
   return duty;
 }
@@ -61,6 +69,7 @@ describe("settling the guarantee", () => {
     const duty = createDuty();
     commit(duty, evening.id, at(9), C);
     goOnline(duty, at(evening.fromHour));
+    deliver(duty, evening.minDeliveries);
     goOffline(duty, at(evening.toHour) - 20, C);
 
     const outcome = settleSlot(duty, at(23), C)!;
@@ -105,6 +114,7 @@ describe("settling the guarantee", () => {
     goOffline(duty, at(15), C);
 
     goOnline(duty, at(evening.fromHour));
+    deliver(duty, evening.minDeliveries);
     goOffline(duty, at(evening.toHour), C);
 
     expect(settleSlot(duty, at(23), C)!.met).toBe(true);
@@ -164,5 +174,80 @@ describe("time on duty", () => {
     expect(goOnline(duty, 10)).toBe(false);
     expect(goOffline(duty, 20, C)).toBe(true);
     expect(goOffline(duty, 30, C)).toBe(false);
+  });
+});
+
+
+describe("the minimum delivery count", () => {
+  /**
+   * Before this term existed you could book the dinner guarantee, go online,
+   * stand still for four hours and collect ₹880 for doing nothing — which was
+   * strictly better than working. This is the term that makes booking a bet.
+   */
+  it("pays nothing to a rider who books, shows up and does no work", () => {
+    const duty = createDuty();
+    commit(duty, evening.id, at(9), C);
+    goOnline(duty, at(evening.fromHour));
+    goOffline(duty, at(evening.toHour), C);
+
+    const outcome = settleSlot(duty, at(23), C)!;
+    expect(outcome.delivered).toBe(0);
+    expect(outcome.met).toBe(false);
+    expect(outcome.reason).toMatch(/delivered 0/);
+  });
+
+  /** One short pays exactly the same as never showing up. */
+  it("pays nothing for one delivery short", () => {
+    const duty = createDuty();
+    commit(duty, evening.id, at(9), C);
+    goOnline(duty, at(evening.fromHour));
+    deliver(duty, evening.minDeliveries - 1);
+    goOffline(duty, at(evening.toHour), C);
+
+    expect(settleSlot(duty, at(23), C)!.met).toBe(false);
+  });
+
+  it("pays out on exactly the required number", () => {
+    expect(settleSlot(goodDay(), at(23), C)!.met).toBe(true);
+  });
+
+  it("ignores deliveries made outside the window", () => {
+    const duty = createDuty();
+    commit(duty, evening.id, at(9), C);
+    goOnline(duty, at(13));
+    for (let i = 0; i < 30; i++) recordDelivery(duty, at(13), C);
+    goOffline(duty, at(18), C);
+    goOnline(duty, at(evening.fromHour));
+    goOffline(duty, at(evening.toHour), C);
+
+    expect(settleSlot(duty, at(23), C)!.delivered).toBe(0);
+  });
+});
+
+describe("letting work go past", () => {
+  /**
+   * Real dispatch pushes one order at a time and ignoring it is declining it.
+   * Standing idle while offers expire has to count, or doing nothing is free.
+   */
+  it("counts an ignored offer against acceptance", () => {
+    const duty = createDuty();
+    for (let i = 0; i < 6; i++) recordAccept(duty);
+    for (let i = 0; i < 4; i++) recordIgnored(duty, at(14), C);
+    expect(acceptanceRate(duty, C)!).toBeCloseTo(0.6, 6);
+  });
+
+  it("breaks a booked window once too many go past inside it", () => {
+    const duty = createDuty();
+    commit(duty, evening.id, at(9), C);
+    goOnline(duty, at(evening.fromHour));
+    for (let i = 0; i <= evening.rejectionsAllowed; i++) {
+      recordIgnored(duty, at(evening.fromHour) + 5, C);
+    }
+    deliver(duty, evening.minDeliveries);
+    goOffline(duty, at(evening.toHour), C);
+
+    const outcome = settleSlot(duty, at(23), C)!;
+    expect(outcome.met).toBe(false);
+    expect(outcome.reason).toMatch(/go past/);
   });
 });

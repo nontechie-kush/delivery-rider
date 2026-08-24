@@ -562,3 +562,10 @@ h2 .slots { display: flex; gap: 3px; margin-left: 2px; }
 .etop { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
 .ontime { text-align: right; }
 .earnings .amt.small { font-size: 26px; color: var(--text); }
+
+.cmt-need { font-size: 12.5px; color: var(--text); margin-top: 4px; }
+.commitment .bar { height: 5px; background: #0a0d0b; border-radius: 3px; margin: 6px 0 5px; overflow: hidden; }
+.commitment .bar i { display: block; height: 100%; background: var(--brand); }
+.commitment.dead .bar i { background: var(--red); }
+.commitment.waiting .bar i { background: var(--dimmer); }
+.summary tr.void td { color: var(--red); }
