@@ -103,6 +103,9 @@ function offerCard(
   const tier = cfg.tiers[order.tier];
   const billableKm = Math.max(0, order.distance - tier.freeKm);
   const expiring = order.expiresAt - state.clock <= 4;
+  // While a job is live, taking another order is an addition to it, not a
+  // competing action — so the button says so and stops shouting.
+  const busy = state.carried.length > 0;
   const tierWord =
     order.tier === "EXPRESS" ? "Express" : order.tier === "STANDARD" ? "Standard" : "Scheduled";
 
@@ -154,8 +157,8 @@ function offerCard(
 
       <div class="offer-actions">
         <button class="reject" data-reject="${esc(order.id)}">Reject</button>
-        <button class="accept" data-accept="${esc(order.id)}" ${room ? "" : "disabled"}>
-          ${room ? "Accept" : "Bag full"}
+        <button class="accept ${busy ? "secondary" : ""}" data-accept="${esc(order.id)}" ${room ? "" : "disabled"}>
+          ${room ? (busy ? "Add to run" : "Accept") : "Bag full"}
         </button>
       </div>
     </article>`;
@@ -164,7 +167,7 @@ function offerCard(
 export function offersBlock(state: ShiftState, cfg: GameConfig, openFee: string | null = null): string {
   if (state.offers.length === 0) {
     return `<section class="block">
-      <h2>New orders</h2>
+      <h2>${state.carried.length > 0 ? "Add to your run" : "New orders"}</h2>
       <p class="empty">Nothing on offer. Wait, or move somewhere busier.</p>
     </section>`;
   }
@@ -174,8 +177,16 @@ export function offersBlock(state: ShiftState, cfg: GameConfig, openFee: string 
     .map((o) => offerCard(state, cfg, o.id, openFee))
     .join("");
 
+  const busy = state.carried.length > 0;
   return `<section class="block">
-    <h2>New orders <span class="count">${state.offers.length}</span></h2>
+    <h2>${busy ? "Add to your run" : "New orders"}
+      <span class="count">${state.offers.length}</span></h2>
+    ${
+      busy
+        ? `<p class="hint">Taking one that shares your route is how a run pays.
+             Taking one that does not is how a run goes late.</p>`
+        : ""
+    }
     <div class="offers">${cards}</div>
   </section>`;
 }

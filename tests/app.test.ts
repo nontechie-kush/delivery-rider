@@ -84,3 +84,51 @@ describe("the map is on demand", () => {
     expect(work?.querySelector(".offers, .empty")).not.toBeNull();
   });
 });
+
+describe("one primary action at a time", () => {
+  beforeEach(() => {
+    document.body.innerHTML = "";
+  });
+
+  /**
+   * Accept and "Ride to X" were both full-strength green, so the screen carried
+   * two primary actions and no hierarchy. While a job is live the ride is the
+   * job; taking another order is an addition to it.
+   */
+  it("demotes Accept once the rider is carrying something", async () => {
+    const app = await mountApp();
+    click(app.querySelector("[data-begin]"));
+
+    const first = app.querySelector("[data-accept]");
+    if (!first) return; // no offers on this seed
+    expect(first.className).not.toContain("secondary");
+
+    click(first);
+    const next = app.querySelector("[data-accept]");
+    if (next) expect(next.className).toContain("secondary");
+  });
+
+  it("says the job is live, not just what to do at it", async () => {
+    const app = await mountApp();
+    click(app.querySelector("[data-begin]"));
+    const offer = app.querySelector("[data-accept]");
+    if (!offer) return;
+
+    click(offer);
+    expect(app.querySelector(".job-tag")?.textContent).toContain("On this job");
+  });
+
+  /**
+   * Offers must stay visible while carrying — batching is the whole design, and
+   * a second order sharing your route is where a run makes its money.
+   */
+  it("keeps offering while carrying, framed as adding to the run", async () => {
+    const app = await mountApp();
+    click(app.querySelector("[data-begin]"));
+    const offer = app.querySelector("[data-accept]");
+    if (!offer) return;
+
+    click(offer);
+    expect(app.innerHTML).toContain("Add to your run");
+  });
+});

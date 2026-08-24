@@ -19,12 +19,25 @@ const km = (v: number): string => `${v.toFixed(1)} km`;
  * Status is type on the background. Chrome is reserved for decisions.
  */
 
-/** How the hour reads to a rider. Volume swings roughly six-fold across a day. */
-export function busyness(demand: number): { word: string; cls: string } {
-  if (demand >= 3) return { word: "Slammed", cls: "hot" };
-  if (demand >= 1.8) return { word: "Busy", cls: "warm" };
-  if (demand >= 0.9) return { word: "Steady", cls: "" };
-  return { word: "Quiet", cls: "cold" };
+/**
+ * How the hour reads to a rider, and what it means for them.
+ *
+ * "Slammed" on its own is a mood, not information — it does not tell the player
+ * whether to work, rest or reposition. So it carries the thing it actually
+ * implies: roughly how many offers an hour to expect. Volume swings six-fold
+ * across a day, which is the single most useful thing to know at a glance.
+ */
+export function busyness(
+  demand: number,
+  cfg: GameConfig,
+): { word: string; cls: string; perHour: number } {
+  const gap = cfg.offerIntervalMean / Math.max(0.05, demand);
+  const perHour = Math.max(1, Math.round(60 / gap));
+
+  if (demand >= 3) return { word: "Slammed", cls: "hot", perHour };
+  if (demand >= 1.8) return { word: "Busy", cls: "warm", perHour };
+  if (demand >= 0.9) return { word: "Steady", cls: "", perHour };
+  return { word: "Quiet", cls: "cold", perHour };
 }
 
 /** Clock as a wall time, since slots are quoted in wall hours. */
@@ -78,7 +91,7 @@ export function statusStrip(state: ShiftState, cfg: GameConfig): string {
   const online = minutesOnlineAt(state.duty, state.clock);
   const onTime = state.completed.filter((c) => !c.late).length;
   const next = nextMilestone(onTime, cfg);
-  const busy = busyness(cfg.demandByHour[hourAt(state.clock, cfg)] ?? 1);
+  const busy = busyness(cfg.demandByHour[hourAt(state.clock, cfg)] ?? 1, cfg);
 
   // The milestone is the day's tension, so it gets the only bar up here.
   const previous = cfg.milestones.filter((m) => m.orders <= onTime).pop()?.orders ?? 0;
@@ -91,7 +104,9 @@ export function statusStrip(state: ShiftState, cfg: GameConfig): string {
         <span class="stat-time">${wallClock(state, cfg)}</span>
         <span class="stat-cash">${rupees(earned)}</span>
         <span class="stat-on">${duration(online)}</span>
-        <span class="stat-busy ${busy.cls}">${busy.word}</span>
+        <span class="stat-busy ${busy.cls}">
+          ${busy.word}<em>~${busy.perHour} offers/hr</em>
+        </span>
       </div>
 
       <div class="goalrow ${close ? "close" : ""} ${next ? "" : "done"}">

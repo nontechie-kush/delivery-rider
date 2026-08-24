@@ -84,9 +84,13 @@ export function jobBlock(state: ShiftState): string {
   return `
     <section class="job ${band}">
       <div class="job-head">
-        <span class="job-step">${atThisStop[0]?.leg === "TO_PICKUP" ? "Collect from" : "Deliver to"}</span>
+        <span class="job-tag">
+          <i class="live" aria-hidden="true"></i>
+          On this job${state.carried.length > 1 ? ` · ${state.carried.length} orders` : ""}
+        </span>
         <span class="job-due">${next.slack < 0 ? `${mins(-next.slack)} late` : `${mins(next.slack)} left`}</span>
       </div>
+      <span class="job-step">${atThisStop[0]?.leg === "TO_PICKUP" ? "Collect from" : "Deliver to"}</span>
       <h1>${esc(here.name)}</h1>
       <p class="job-where">${esc(here.area)} · ${mins(ride)} away${
         next.serves > 1 ? ` · ${next.serves} orders here` : ""

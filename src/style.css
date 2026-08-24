@@ -105,7 +105,7 @@ button:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 .stat-time { font-size: 19px; font-weight: 650; letter-spacing: -0.02em; }
 .stat-cash { font-size: 19px; font-weight: 700; color: var(--brand); letter-spacing: -0.02em; }
 .stat-on { font-size: 13px; color: var(--dim); }
-.stat-busy { margin-left: auto; font-size: 10.5px; font-weight: 800; letter-spacing: 0.09em; text-transform: uppercase; color: var(--dim); }
+.stat-busy { margin-left: auto; text-align: right; font-size: 10.5px; font-weight: 800; letter-spacing: 0.09em; text-transform: uppercase; color: var(--dim); }
 .stat-busy.hot { color: var(--red); }
 .stat-busy.warm { color: var(--amber); }
 .stat-busy.cold { color: var(--dimmer); }
@@ -482,7 +482,6 @@ button:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 .job.late { border-left-color: var(--red); }
 
 .job-head { display: flex; justify-content: space-between; align-items: baseline; }
-.job-step { font-size: 10.5px; font-weight: 800; letter-spacing: 0.09em; text-transform: uppercase; color: var(--dim); }
 .job-due { font-size: 13px; font-weight: 650; color: var(--brand); font-variant-numeric: tabular-nums; }
 .job.soon .job-due { color: var(--amber); }
 .job.late .job-due { color: var(--red); }
@@ -597,3 +596,30 @@ button:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
    time only moves when the rider does, so it is deliberately not a ticker. */
 .countdown { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--dimmer); font-variant-numeric: tabular-nums; }
 .countdown.soon { color: var(--amber); }
+
+/* -------------------------------------------- one primary action at a time */
+
+/* Accept and "Ride to X" were both full-strength green, so the screen had two
+   primary actions and no hierarchy. While a job is live the ride is the job;
+   taking another order is an addition to it. */
+.offer-actions .accept.secondary {
+  background: transparent;
+  border: 1px solid var(--brand-deep);
+  color: var(--brand);
+  font-weight: 650;
+}
+.offer-actions .accept.secondary:hover:not(:disabled) { background: #16211d; border-color: var(--brand); }
+
+/* The live job says it is live, rather than only naming the next action. */
+.job-tag { display: inline-flex; align-items: center; gap: 7px; font-size: 10.5px; font-weight: 800; letter-spacing: 0.09em; text-transform: uppercase; color: var(--brand); }
+.job-tag .live { width: 7px; height: 7px; border-radius: 50%; background: var(--brand); box-shadow: 0 0 0 3px rgba(0, 227, 155, 0.18); }
+.job.soon .job-tag, .job.soon .job-tag .live { color: var(--amber); }
+.job.soon .job-tag .live { background: var(--amber); box-shadow: 0 0 0 3px rgba(255, 176, 46, 0.18); }
+.job.late .job-tag, .job.late .job-tag .live { color: var(--red); }
+.job.late .job-tag .live { background: var(--red); box-shadow: 0 0 0 3px rgba(255, 106, 82, 0.18); }
+.job-step { display: block; font-size: 11px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--dimmer); margin-top: 9px; }
+
+/* What the busy word actually implies, since a mood is not information. */
+.stat-busy em { display: block; font-style: normal; font-size: 9.5px; font-weight: 500; letter-spacing: 0.04em; text-transform: none; color: var(--dimmer); margin-top: 1px; }
+
+.hint { font-size: 12px; color: var(--dimmer); line-height: 1.45; margin: 0 0 10px; }
