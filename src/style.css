@@ -1,15 +1,19 @@
 /*
- * NOW Partner — rider app skin.
+ * NOW Partner.
  *
- * Built in the grammar every rider app shares rather than any one brand's
- * identity: duty state on top, earnings as the biggest number on screen, an
- * incentive strip, and order cards built around a stacked pickup-to-drop route.
+ * Rewritten from scratch after the previous file accumulated 57 duplicated
+ * class names and eleven orphaned rule sets through repeated append-and-delete
+ * edits — a stylesheet fighting itself. The visible symptom was the start
+ * screen collapsing, because `.slot` was declared twice: once as a 9x12 pip for
+ * bag compartments and once as a three-column row.
  *
- * Design rules doing the work:
- *   1. Brand mint means money and go. Amber means hurry. Red means late.
- *   2. Chrome is near-black so the app reads on a phone clamped to a handlebar.
- *   3. Nothing is decorative — every element is one a real rider app carries.
+ * Two rules keep it honest:
+ *
+ *   1. Every class is declared exactly once, under the section it belongs to.
+ *   2. A bordered card means something you act on. Status is type on the
+ *      ground. Chrome is reserved for decisions.
  */
+
 :root {
   --chrome: #0a0c0b;
   --bg: #101312;
@@ -30,15 +34,14 @@
 }
 
 * { box-sizing: border-box; }
-
 html, body { margin: 0; background: var(--bg); }
 
 body {
   color: var(--text);
   font: 15px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   padding: 0;
-  -webkit-font-smoothing: antialiased;
   overflow: hidden;
+  -webkit-font-smoothing: antialiased;
 }
 
 /* Map underneath, sheet over it — the production rider-app shape. The app owns
@@ -54,6 +57,79 @@ body {
   flex-direction: column;
 }
 
+h2 {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--dim);
+  font-weight: 700;
+  margin: 18px 0 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.block { padding: 12px 14px 0; }
+.empty { color: var(--dimmer); font-size: 14px; margin: 0; padding: 16px 0; }
+.count {
+  margin-left: auto;
+  background: var(--card-2);
+  color: var(--dim);
+  border-radius: 10px;
+  padding: 1px 8px;
+  font-size: 10.5px;
+  letter-spacing: 0;
+}
+
+button { font: inherit; cursor: pointer; border-radius: 5px; }
+button:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+/* ============================================================ app chrome */
+
+.statusbar {
+  flex: none;
+  background: var(--chrome);
+  padding: 11px 14px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--line);
+}
+.brand { font-size: 15px; font-weight: 800; letter-spacing: 0.06em; color: var(--brand); }
+.brand em { font-style: normal; font-weight: 500; color: var(--dim); letter-spacing: 0.04em; font-size: 12px; }
+.online { color: var(--brand); font-weight: 600; font-size: 12.5px; display: flex; align-items: center; gap: 6px; }
+.online i { width: 7px; height: 7px; border-radius: 50%; background: var(--brand); box-shadow: 0 0 0 3px rgba(0, 227, 155, 0.18); }
+
+/* ================================================================ status */
+
+.status { flex: none; padding: 10px 14px 12px; background: var(--chrome); border-bottom: 1px solid var(--line); }
+
+.statrow { display: flex; align-items: baseline; gap: 14px; font-variant-numeric: tabular-nums; }
+.stat-time { font-size: 19px; font-weight: 650; letter-spacing: -0.02em; }
+.stat-cash { font-size: 19px; font-weight: 700; color: var(--brand); letter-spacing: -0.02em; }
+.stat-on { font-size: 13px; color: var(--dim); }
+.stat-busy { margin-left: auto; font-size: 10.5px; font-weight: 800; letter-spacing: 0.09em; text-transform: uppercase; color: var(--dim); }
+.stat-busy.hot { color: var(--red); }
+.stat-busy.warm { color: var(--amber); }
+.stat-busy.cold { color: var(--dimmer); }
+
+/* The day's tension gets the only bar on screen. */
+.goalrow { margin-top: 9px; }
+.goalbar { height: 4px; background: #0a0d0b; border-radius: 2px; overflow: hidden; }
+.goalbar i { display: block; height: 100%; background: var(--brand); transition: width 0.25s ease; }
+.goalrow.close .goalbar i { background: var(--amber); }
+.goaltext { display: block; font-size: 12px; color: var(--dim); margin-top: 5px; }
+.goaltext b { color: var(--text); font-weight: 600; }
+.goalrow.close .goaltext b { color: var(--amber); }
+
+/* Warnings only when true, so a full row means act. */
+.warnrow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.warn { font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 11px; background: #2a2416; color: var(--amber); }
+.warn.tight { background: #33260f; }
+.warn.bad { background: #2e1a16; color: var(--red); }
+
+/* =================================================================== map */
+
 .maplayer {
   position: relative;
   flex: 1;
@@ -63,26 +139,37 @@ body {
   justify-content: center;
   padding: 10px 10px 0;
 }
-.maplayer .map { width: 100%; height: 100%; touch-action: manipulation; }
+.map { display: block; width: 100%; height: 100%; touch-action: manipulation; }
 
-/* Map of Gurgaon. Stroke widths are in kilometres because the SVG is drawn in
-   projected km, so everything scales with the viewBox rather than the screen. */
+.bubble {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(10, 12, 11, 0.9);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 6px 13px 6px 10px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--brand); box-shadow: 0 0 0 3px rgba(0, 227, 155, 0.18); flex: none; }
+
+/* Stroke widths are in kilometres, because the SVG is drawn in projected km. */
 .map .road { fill: none; stroke: #232b26; stroke-width: 0.13; stroke-linecap: round; stroke-linejoin: round; }
 .map .road.major { stroke: #2e3830; stroke-width: 0.22; }
-
 .map .leg { stroke-width: 0.08; stroke-dasharray: 0.26 0.22; opacity: 0.9; }
 .map .leg.ok { stroke: var(--brand-deep); }
 .map .leg.soon { stroke: var(--amber); }
 .map .leg.late { stroke: var(--red); }
-
 .map .preview { stroke: var(--dim); stroke-width: 0.07; stroke-dasharray: 0.16 0.18; }
 .map .preview.solid { stroke: var(--text); stroke-width: 0.1; stroke-dasharray: none; }
-
 .map .node { cursor: pointer; }
 .map .hit { fill: transparent; }
 .map .pip { fill: #39433c; stroke: #4c574f; stroke-width: 0.05; }
 .map .pickup .pip { fill: #2f3f4a; stroke: #47606f; }
-
 .map .name {
   font-size: 0.34px;
   font-weight: 600;
@@ -94,66 +181,21 @@ body {
   stroke: rgba(10, 12, 11, 0.85);
   stroke-width: 0.14px;
 }
-.map .badge {
-  font-size: 0.32px;
-  font-weight: 800;
-  fill: #0a0c0b;
-  text-anchor: middle;
-  pointer-events: none;
-}
-
+.map .badge { font-size: 0.32px; font-weight: 800; fill: #0a0c0b; text-anchor: middle; pointer-events: none; }
 .map .pending .pip { fill: var(--brand); stroke: none; }
 .map .pending.soon .pip { fill: var(--amber); }
 .map .pending.late .pip { fill: var(--red); }
 .map .pending .name { fill: var(--text); }
-
 .map .here .pip { fill: #0a0c0b; stroke: var(--brand); stroke-width: 0.14; }
 .map .here .name { fill: var(--text); font-weight: 800; }
-
 .map .pv-pickup .pip { fill: var(--text); stroke: none; }
 .map .pv-drop .pip { fill: #0a0c0b; stroke: var(--text); stroke-width: 0.11; }
-
 .map .node:hover .pip { stroke: var(--text); stroke-width: 0.09; }
 .map .node:focus-visible { outline: none; }
 .map .node:focus-visible .pip { stroke: var(--brand); stroke-width: 0.14; }
 
-/* Floating status pill — duty state and earnings, always visible, never over
-   the part of the map that matters. */
-.bubble {
-  position: absolute;
-  top: 16px;
-  left: 16px;
-  background: rgba(10, 12, 11, 0.92);
-  border: 1px solid var(--line);
-  border-radius: 22px;
-  padding: 7px 14px 7px 11px;
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  backdrop-filter: blur(6px);
-}
-.bubble .pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--brand); box-shadow: 0 0 0 3px rgba(0, 227, 155, 0.18); flex: none; }
-.bub-main { font-size: 17px; font-weight: 750; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
-.bub-sub { font-size: 11px; color: var(--dim); }
-.bub-sub b { font-weight: 700; }
-.bub-sub b.hot { color: var(--red); }
-.bub-sub b.warm { color: var(--amber); }
-.bub-sub b.cold { color: var(--dimmer); }
+/* ================================================================= sheet */
 
-.whereami {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  font-size: 11px;
-  color: var(--dim);
-  background: rgba(10, 12, 11, 0.92);
-  border: 1px solid var(--line);
-  border-radius: 22px;
-  padding: 7px 12px;
-}
-
-/* Three snap states, as Delivery Hero's Dynamic Sheet does it: minimised for a
-   bigger map, half alongside it, or pulled up full for the work list. */
 .sheet {
   flex: none;
   background: var(--bg);
@@ -165,20 +207,11 @@ body {
   transition: height 0.22s cubic-bezier(0.22, 1, 0.36, 1);
   min-height: 0;
 }
-.sheet.peek { height: 27vh; }
+.sheet.peek { height: 30vh; }
 .sheet.half { height: 58vh; }
 .sheet.full { height: calc(100dvh - 44px); }
 
-.grabber {
-  background: none;
-  border: 0;
-  padding: 9px 0 5px;
-  width: 100%;
-  cursor: grab;
-  display: flex;
-  justify-content: center;
-  touch-action: none;
-}
+.grabber { background: none; border: 0; padding: 9px 0 5px; width: 100%; cursor: grab; display: flex; justify-content: center; touch-action: none; }
 .grabber i { display: block; width: 38px; height: 4px; border-radius: 2px; background: var(--line); }
 .grabber:hover i { background: var(--dimmer); }
 
@@ -192,146 +225,46 @@ body {
   border-top: 1px solid var(--line);
   background: var(--chrome);
 }
+.sheet-action .go { flex: 1; background: var(--brand); border: 0; color: #062119; padding: 12px 16px; text-align: left; min-height: 56px; }
+.sheet-action .go:hover { background: #2af0af; }
+.sheet-action .wait { background: var(--card-2); border: 1px solid var(--line); color: var(--dim); padding: 12px 16px; font-size: 13.5px; min-height: 56px; }
+.sheet-action .wait.wide { flex: 1; text-align: center; }
+.sheet-action .wait:hover { color: var(--text); }
+.golabel { display: block; font-size: 15.5px; font-weight: 750; letter-spacing: -0.01em; }
+.gometa { display: block; font-size: 11.5px; font-weight: 500; opacity: 0.72; margin-top: 1px; }
 
-h2 {
-  font-size: 11px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--dim);
-  font-weight: 700;
-  margin: 0 0 9px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-h2 .count {
-  margin-left: auto;
-  background: var(--card-2);
-  color: var(--dim);
-  border-radius: 10px;
-  padding: 1px 8px;
-  font-size: 10.5px;
-  letter-spacing: 0;
-}
+/* Tabs, so the decision is one tap away and never below the fold. */
+.tabs { flex: none; display: flex; gap: 2px; padding: 0 12px 8px; }
+.tab { flex: 1; background: none; border: 0; border-radius: 7px; color: var(--dim); font-size: 13.5px; font-weight: 600; padding: 8px 4px; text-align: center; }
+.tab.on { background: var(--card-2); color: var(--text); }
+.tab i { font-style: normal; font-size: 11px; font-weight: 700; border-radius: 9px; padding: 1px 6px; margin-left: 5px; background: var(--line); color: var(--dim); }
+.tab.on i { background: var(--brand); color: #062119; }
 
-.block { padding: 16px 14px 0; }
-.empty { color: var(--dimmer); font-size: 14px; margin: 0; padding: 14px 0; }
-
-/* ------------------------------------------------------------ app chrome */
-
-.statusbar {
-  flex: none;
-  background: var(--chrome);
-  padding: 11px 14px 10px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  border-bottom: 1px solid var(--line);
-}
-.brand { font-size: 15px; font-weight: 800; letter-spacing: 0.06em; color: var(--brand); }
-.brand em { font-style: normal; font-weight: 500; color: var(--dim); letter-spacing: 0.04em; font-size: 12px; }
-.sig { color: var(--dimmer); font-size: 11px; letter-spacing: 2px; }
-
-
-/* ------------------------------------------------------------- earnings */
-
-.earnings { padding: 4px 14px 14px; }
-.earnings .label { font-size: 10.5px; letter-spacing: 0.11em; text-transform: uppercase; color: var(--dimmer); font-weight: 600; }
-.earnings .amt {
-  font-size: 40px;
-  font-weight: 750;
-  letter-spacing: -0.03em;
-  line-height: 1.05;
-  margin: 2px 0 6px;
-  font-variant-numeric: tabular-nums;
-}
-.subline { display: flex; gap: 14px; font-size: 12px; color: var(--dim); }
-
-/* The day bar is also the demand curve, so the evening rush is visible before
-   it lands. Knowing what is coming is most of the skill this game teaches. */
-
-/* ------------------------------------------------------------ incentive */
-
-.incentive {
-  margin: 12px 14px 0;
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--brand-deep);
-  padding: 11px 13px 10px;
-}
-.incentive.close { border-left-color: var(--amber); }
-.incentive.cleared { border-left-color: var(--brand); display: flex; justify-content: space-between; align-items: baseline; }
-.incentive.cleared b { font-size: 14px; }
-.incentive.cleared span { font-size: 12px; color: var(--dim); }
-
-.inc-head { display: flex; justify-content: space-between; align-items: baseline; }
-.inc-head b { font-size: 15px; font-weight: 650; }
-.inc-head span { font-size: 16px; font-weight: 700; color: var(--brand); font-variant-numeric: tabular-nums; }
-.incentive.close .inc-head b { color: var(--amber); }
-
-.incentive .bar { height: 6px; background: #0a0d0b; border-radius: 3px; margin: 8px 0 5px; overflow: hidden; }
-.incentive .bar i { display: block; height: 100%; background: var(--brand); }
-.incentive.close .bar i { background: var(--amber); }
-.inc-foot { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--dimmer); }
-
-/* ------------------------------------------------------------------ map */
-
-.mapblock.open .stop { position: relative; padding: 5px 0; }
-.stop .pin {
-  position: absolute;
-  left: -22px;
-  top: 10px;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-}
-.stop.pickup .pin { background: var(--brand); }
-.stop.drop .pin { background: transparent; border: 2px solid var(--dim); }
-.stop.done .pin { background: var(--dimmer); }
-.stoptext b { display: block; font-size: 14.5px; font-weight: 600; line-height: 1.3; }
-.stop.done .stoptext b { color: var(--dim); text-decoration: line-through; }
-.stoptext span { display: block; font-size: 11.5px; color: var(--dimmer); margin-top: 1px; }
-
-/* --------------------------------------------------------------- offers */
+/* ================================================================ orders */
 
 .offers { display: flex; flex-direction: column; gap: 10px; }
 
-.offer {
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  padding: 11px 13px 11px;
-}
+.offer { background: var(--card); border: 1px solid var(--line); border-radius: 5px; padding: 11px 13px; }
 .offer.risky { border-color: #4a3a1c; }
-.offer.no { border-color: #4a2620; }
+.offer.no { border-color: #4a2620; opacity: 0.75; }
 
 .offer-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 7px; }
-.tier {
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-  padding: 2px 7px;
-  border-radius: 3px;
-}
+.tier { font-size: 10px; font-weight: 800; letter-spacing: 0.09em; text-transform: uppercase; padding: 2px 7px; border-radius: 3px; }
 .tier.EXPRESS { background: #4a2620; color: var(--red); }
 .tier.STANDARD { background: #3d3218; color: var(--amber); }
 .tier.SCHEDULED { background: var(--card-2); color: var(--dim); }
 .countdown { font-size: 11.5px; color: var(--dimmer); font-variant-numeric: tabular-nums; }
 
-.payout { display: flex; align-items: baseline; gap: 9px; margin-bottom: 9px; }
+.payout { display: flex; align-items: baseline; gap: 9px; margin-bottom: 8px; }
 .payout b { font-size: 27px; font-weight: 750; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
 .payout span { font-size: 12px; color: var(--dim); }
 
-.fit {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  margin: 10px 0 11px;
-  padding-top: 9px;
-  border-top: 1px solid var(--line-soft);
-  font-size: 12px;
-}
+/* A fee means nothing without the cost of reaching it. */
+.fuelline { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; color: var(--dim); border-top: 1px solid var(--line-soft); margin-bottom: 8px; padding-top: 7px; }
+.fuelnums b { color: var(--text); font-weight: 650; }
+.fuelline.thin .fuelnums b { color: var(--amber); }
+
+.fit { display: flex; align-items: baseline; gap: 8px; margin: 9px 0 11px; padding-top: 9px; border-top: 1px solid var(--line-soft); font-size: 12px; }
 .fitword { font-weight: 700; letter-spacing: 0.02em; }
 .fit.easy .fitword { color: var(--brand); }
 .fit.tight .fitword { color: var(--dim); }
@@ -340,46 +273,38 @@ h2 .count {
 .fitwhy { color: var(--dimmer); font-size: 11.5px; }
 
 .offer-actions { display: grid; grid-template-columns: 1fr 1.6fr; gap: 8px; }
-
-button { font: inherit; cursor: pointer; border-radius: 4px; }
-button:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
-
-.offer-actions .reject {
-  background: transparent;
-  border: 1px solid var(--line);
-  color: var(--dim);
-  padding: 11px 0;
-  font-size: 14px;
-}
+.offer-actions .reject { background: transparent; border: 1px solid var(--line); color: var(--dim); padding: 12px 0; font-size: 14px; min-height: 48px; }
 .offer-actions .reject:hover { border-color: var(--dim); color: var(--text); }
-.offer-actions .accept {
-  background: var(--brand);
-  border: 0;
-  color: #062119;
-  font-weight: 750;
-  font-size: 15px;
-  padding: 11px 0;
-}
+.offer-actions .accept { background: var(--brand); border: 0; color: #062119; font-weight: 750; font-size: 15px; padding: 12px 0; min-height: 48px; }
 .offer-actions .accept:hover:not(:disabled) { background: #2af0af; }
 .offer-actions .accept:disabled { background: var(--card-2); color: var(--dimmer); cursor: not-allowed; }
 
-/* ----------------------------------------------------------------- bag */
+/* The stacked pickup-to-drop with a dotted connector — the single most
+   recognisable element of every rider app. */
+.route { position: relative; padding-left: 22px; }
+.route::before { content: ""; position: absolute; left: 4px; top: 15px; bottom: 15px; width: 0; border-left: 2px dotted var(--line); }
+.stop { position: relative; padding: 5px 0; }
+.pin { position: absolute; left: -22px; top: 10px; width: 10px; height: 10px; border-radius: 50%; }
+.stop.pickup .pin { background: var(--brand); }
+.stop.drop .pin { background: transparent; border: 2px solid var(--dim); }
+.stop.done .pin { background: var(--dimmer); }
+.stoptext b { display: block; font-size: 14.5px; font-weight: 600; line-height: 1.3; }
+.stop.done .stoptext b { color: var(--dim); text-decoration: line-through; }
+.stoptext span { display: block; font-size: 11.5px; color: var(--dimmer); margin-top: 1px; }
 
-h2 .slots { display: flex; gap: 3px; margin-left: 2px; }
-.slot { width: 9px; height: 12px; border-radius: 2px; border: 1px solid var(--line); display: block; }
-.slot.hot { border-color: #4a3a2a; }
-.slot.cold { border-color: #2a3d4a; }
-.slot.full { background: var(--brand); border-color: var(--brand); }
+/* =================================================================== bag */
+
+/* Compartment pips in the section heading. Distinct from `.slot`, which is a
+   bookable window on the start screen — the two shared a name and the pip's
+   9x12 box was flattening the start rows. */
+.slots { display: flex; gap: 3px; margin-left: 2px; }
+.bagpip { width: 9px; height: 12px; border-radius: 2px; border: 1px solid var(--line); display: block; }
+.bagpip.hot { border-color: #4a3a2a; }
+.bagpip.cold { border-color: #2a3d4a; }
+.bagpip.full { background: var(--brand); border-color: var(--brand); }
 
 .tasks { display: flex; flex-direction: column; gap: 8px; }
-.task {
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--brand-deep);
-  border-radius: 4px;
-  padding: 9px 13px 10px;
-  cursor: pointer;
-}
+.task { background: var(--card); border: 1px solid var(--line); border-left: 3px solid var(--brand-deep); border-radius: 5px; padding: 9px 13px 10px; cursor: pointer; }
 .task.soon { border-left-color: var(--amber); }
 .task.late { border-left-color: var(--red); }
 .task:hover { background: var(--card-2); }
@@ -389,315 +314,16 @@ h2 .slots { display: flex; gap: 3px; margin-left: 2px; }
 .task.soon .due { color: var(--amber); }
 .task.late .due { color: var(--red); }
 
-/* ------------------------------------------------------------ action bar */
-
-.endshift { padding: 20px 14px 0; }
-.endshift button {
-  background: transparent;
-  border: 1px solid var(--line);
-  color: var(--dimmer);
-  font-size: 13px;
-  padding: 9px 14px;
-  width: 100%;
-}
-.endshift button:hover { color: var(--red); border-color: #4a2620; }
-
-/* Pinned like every rider app's primary action, so the next move is always
-   reachable with a thumb without scrolling. */
-.actionbar {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 10;
-  display: flex;
-  gap: 8px;
-  padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px));
-  background: linear-gradient(to top, var(--chrome) 72%, rgba(10, 12, 11, 0));
-  max-width: 460px;
-  margin: 0 auto;
-}
-.actionbar .go {
-  flex: 1;
-  background: var(--brand);
-  border: 0;
-  color: #062119;
-  padding: 11px 16px;
-  text-align: left;
-}
-.actionbar .go:hover { background: #2af0af; }
-.golabel { display: block; font-size: 15.5px; font-weight: 750; letter-spacing: -0.01em; }
-.gometa { display: block; font-size: 11.5px; font-weight: 500; opacity: 0.72; margin-top: 1px; }
-.actionbar .wait {
-  background: var(--card-2);
-  border: 1px solid var(--line);
-  color: var(--dim);
-  padding: 11px 15px;
-  font-size: 13.5px;
-}
-.actionbar .wait:hover { color: var(--text); }
-
-/* -------------------------------------------------------------- summary */
-
-.summary { padding: 28px 14px 40px; }
-.summary .label { font-size: 10.5px; letter-spacing: 0.11em; text-transform: uppercase; color: var(--dimmer); font-weight: 600; }
-.summary .amt { font-size: 46px; font-weight: 750; letter-spacing: -0.035em; color: var(--brand); line-height: 1.05; margin: 3px 0 2px; font-variant-numeric: tabular-nums; }
-.summary .paidout { font-size: 12.5px; color: var(--dim); }
-.summary table { width: 100%; border-collapse: collapse; font-size: 14px; margin: 22px 0 0; }
-.summary td { padding: 9px 0; border-bottom: 1px solid var(--line-soft); }
-.summary td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
-.summary td em { font-style: normal; color: var(--dimmer); font-size: 12px; }
-.summary tr.cost td { color: var(--dim); }
-.waited { font-size: 13px; color: var(--dim); line-height: 1.55; margin: 18px 0 22px; }
-.waited b { color: var(--text); }
-.flag { color: var(--amber); display: block; margin-top: 3px; }
-.summary .go { display: block; width: 100%; background: var(--brand); border: 0; color: #062119; padding: 14px; text-align: center; }
-.summary .go:hover { background: #2af0af; }
-
-@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
-
-
-/* ---------------------------------------------------------- action + misc */
-
-.endshift { padding: 18px 14px 8px; }
-.endshift button {
-  background: transparent; border: 1px solid var(--line); color: var(--dimmer);
-  font-size: 13px; padding: 11px 14px; width: 100%;
-}
-.endshift button:hover { color: var(--red); border-color: #4a2620; }
-
-.sheet-action .go {
-  flex: 1; background: var(--brand); border: 0; color: #062119;
-  padding: 12px 16px; text-align: left; min-height: 56px;
-}
-.sheet-action .go:hover { background: #2af0af; }
-.golabel { display: block; font-size: 15.5px; font-weight: 750; letter-spacing: -0.01em; }
-.gometa { display: block; font-size: 11.5px; font-weight: 500; opacity: 0.72; margin-top: 1px; }
-.sheet-action .wait {
-  background: var(--card-2); border: 1px solid var(--line); color: var(--dim);
-  padding: 12px 16px; font-size: 13.5px; min-height: 56px;
-}
-.sheet-action .wait.wide { flex: 1; text-align: center; }
-.sheet-action .wait:hover { color: var(--text); }
-
-.summary .go { display: block; width: 100%; background: var(--brand); border: 0; color: #062119; padding: 15px; text-align: center; }
-.summary .go:hover { background: #2af0af; }
-.summary { overflow-y: auto; flex: 1; }
-
-/* ---------------------------------------------------------- going on duty */
-
-.start { flex: 1; overflow-y: auto; padding: 24px 16px 40px; }
-.start .label { font-size: 10.5px; letter-spacing: .11em; text-transform: uppercase; color: var(--dimmer); font-weight: 600; }
-.start h1 { font-size: 27px; font-weight: 750; letter-spacing: -.03em; margin: 4px 0 18px; }
-.start h2 { margin: 24px 0 6px; }
-.slotintro { font-size: 13px; color: var(--dim); margin: 0 0 12px; line-height: 1.5; }
-
-/* Live position. Never blocks the day — denied or timed out just reads as a
-   sentence and the button below still works. */
-.locrow {
-  display: flex; align-items: center; gap: 10px;
-  background: var(--card); border: 1px solid var(--line);
-  border-left: 3px solid var(--brand); border-radius: 4px;
-  padding: 12px 14px; font-size: 13.5px;
-}
-.locrow.busy { border-left-color: var(--dimmer); }
-.locpin { width: 9px; height: 9px; border-radius: 50%; background: var(--brand); flex: none; box-shadow: 0 0 0 4px rgba(0,227,155,.15); }
-.locrow.busy .locpin { background: var(--dimmer); box-shadow: none; }
-.loctext { color: var(--text); }
-.locrow.busy .loctext { color: var(--dim); }
-
-.slotpicks { display: flex; flex-direction: column; gap: 8px; margin-bottom: 22px; }
-.slotpick {
-  display: flex; align-items: flex-start; gap: 11px;
-  background: var(--card); border: 1px solid var(--line); border-radius: 4px;
-  padding: 12px 13px; cursor: pointer;
-}
-.slotpick:hover { border-color: #3c4640; }
-.slotpick input { margin: 2px 0 0; accent-color: var(--brand); width: 17px; height: 17px; flex: none; }
-.slotpick:has(input:checked) { border-color: var(--brand); background: #16211d; }
-.slotbody { flex: 1; min-width: 0; }
-.slotbody b { display: block; font-size: 15px; font-weight: 650; }
-.slothours { display: block; font-size: 12px; color: var(--dim); margin-top: 1px; font-variant-numeric: tabular-nums; }
-.slotterms { display: block; font-size: 11.5px; color: var(--dimmer); margin-top: 5px; line-height: 1.45; }
-.slotpay { font-size: 17px; font-weight: 750; color: var(--brand); font-variant-numeric: tabular-nums; flex: none; }
-.slotpay.free { color: var(--dimmer); font-weight: 400; }
-
-.start .go {
-  display: block; width: 100%; background: var(--brand); border: 0;
-  color: #062119; padding: 14px 16px; text-align: center; min-height: 56px;
-}
-.start .go:hover { background: #2af0af; }
-
-
-
-.cmt-need { font-size: 12.5px; color: var(--text); margin-top: 4px; }
-.commitment .bar { height: 5px; background: #0a0d0b; border-radius: 3px; margin: 6px 0 5px; overflow: hidden; }
-.commitment .bar i { display: block; height: 100%; background: var(--brand); }
-.commitment.dead .bar i { background: var(--red); }
-.commitment.waiting .bar i { background: var(--dimmer); }
-.summary tr.void td { color: var(--red); }
-
-
-/* ------------------------------------------------------------------ ride */
-
-/* The road takes the whole screen. Controls sit in the bottom corners because
-   that is where thumbs are, and lane-splitting needs both of them. */
-.ridestage { position: absolute; inset: 0; background: #0d1a24; }
-.ridewrap { position: absolute; inset: 0; overflow: hidden; }
-.ridecanvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-
-.ridehud {
-  position: absolute; top: 0; left: 0; right: 0;
-  display: flex; justify-content: space-between; align-items: flex-start;
-  padding: 14px 16px; pointer-events: none;
-  background: linear-gradient(to bottom, rgba(6,10,12,.75), transparent);
-}
-.ridedest span { display: block; font-size: 10.5px; letter-spacing: .11em; text-transform: uppercase; color: rgba(255,255,255,.55); }
-.ridedest b { display: block; font-size: 18px; font-weight: 700; letter-spacing: -.02em; }
-.ridebag { font-size: 12px; color: rgba(255,255,255,.65); background: rgba(6,10,12,.6); padding: 5px 10px; border-radius: 12px; }
-
-.ridemeter {
-  position: absolute; top: 0; left: 0; right: 0; height: 3px;
-  background: rgba(255,255,255,.12);
-}
-.ridemeter i { display: block; height: 100%; background: var(--brand); }
-
-.ridecontrols {
-  position: absolute; left: 0; right: 0; bottom: 0;
-  display: flex; gap: 10px; padding: 14px 14px calc(18px + env(safe-area-inset-bottom, 0px));
-  touch-action: none;
-}
-.rc {
-  border: 1px solid rgba(255,255,255,.16); background: rgba(10,14,12,.55);
-  border-radius: 12px; height: 74px; -webkit-tap-highlight-color: transparent;
-  backdrop-filter: blur(3px); cursor: pointer;
-}
-.rc:active { background: rgba(255,255,255,.16); }
-.rc.left, .rc.right { flex: 1; position: relative; }
-/* Chevrons, drawn rather than shipped as glyphs so they scale cleanly. */
-.rc.left::after, .rc.right::after {
-  content: ""; position: absolute; top: 50%; left: 50%;
-  width: 15px; height: 15px; margin: -8px 0 0 -8px;
-  border-left: 3px solid rgba(255,255,255,.8); border-bottom: 3px solid rgba(255,255,255,.8);
-}
-.rc.left::after { transform: rotate(45deg); }
-.rc.right::after { transform: rotate(-135deg); }
-.rc.gas { flex: 1.5; background: rgba(0,227,155,.9); border-color: transparent; color: #062119; }
-.rc.gas:active { background: #2af0af; }
-.rc.gas span { font-size: 17px; font-weight: 800; letter-spacing: .08em; }
-
-.ridehint {
-  position: absolute; left: 0; right: 0; bottom: 104px;
-  text-align: center; font-size: 11.5px; color: rgba(255,255,255,.45);
-  pointer-events: none;
-}
-
-/* Speedometer, so full throttle means something a person recognises. */
-.ridespeed {
-  position: absolute; right: 16px; top: 74px; text-align: right;
-  pointer-events: none; font-variant-numeric: tabular-nums;
-}
-.ridespeed b { display: block; font-size: 30px; font-weight: 750; letter-spacing: -.03em; line-height: 1; }
-.ridespeed span { font-size: 10.5px; letter-spacing: .1em; color: rgba(255,255,255,.5); }
-
-/* The light ahead. A red is a decision: brake and lose four seconds, or run it. */
-.ridelight {
-  position: absolute; left: 50%; top: 78px; transform: translateX(-50%);
-  display: flex; align-items: center; gap: 8px;
-  background: rgba(6,10,12,.72); border-radius: 20px; padding: 6px 14px 6px 10px;
-  pointer-events: none; font-size: 12.5px; font-weight: 600;
-}
-.ridelight[hidden] { display: none; }
-.ridelight i { width: 10px; height: 10px; border-radius: 50%; }
-.ridelight.red i { background: #ff4a35; box-shadow: 0 0 0 4px rgba(255,74,53,.22); }
-.ridelight.green i { background: #38e08a; }
-.ridelight.held i { background: #ffb02e; }
-.ridelight.red { color: #ff8f7f; }
-.ridelight.held { color: #ffb02e; }
-.ridelight.green { color: rgba(255,255,255,.6); }
-
-/* Distance and arrival, counted down in the units a rider thinks in. */
-.ridestats {
-  position: absolute; left: 16px; top: 78px;
-  display: flex; gap: 18px; pointer-events: none;
-}
-.rs b { display: block; font-size: 22px; font-weight: 700; letter-spacing: -.02em; line-height: 1; font-variant-numeric: tabular-nums; }
-.rs span { font-size: 10px; letter-spacing: .09em; text-transform: uppercase; color: rgba(255,255,255,.45); }
-.ridestats.late .rs-eta { color: #ff6a52; }
-.ridestats.late .rs-eta + span { color: rgba(255,106,82,.8); }
-
-/* ==========================================================================
-   REDESIGN
-   One rule throughout: a bordered card means something you act on. Status is
-   type on the ground. Before this, six status blocks all wore the same
-   left-stripe card, so nothing stood out and the only thing the player acts on
-   sat sixth in a scroll of seven.
-   ========================================================================== */
-
-/* -------------------------------------------------------------- status */
-
-.status { flex: none; padding: 10px 14px 12px; background: var(--chrome); border-bottom: 1px solid var(--line); }
-
-.statrow {
-  display: flex; align-items: baseline; gap: 14px;
-  font-variant-numeric: tabular-nums;
-}
-.stat-time { font-size: 19px; font-weight: 650; letter-spacing: -.02em; }
-.stat-cash { font-size: 19px; font-weight: 700; color: var(--brand); letter-spacing: -.02em; }
-.stat-on { font-size: 13px; color: var(--dim); }
-.stat-busy {
-  margin-left: auto; font-size: 10.5px; font-weight: 800;
-  letter-spacing: .09em; text-transform: uppercase; color: var(--dim);
-}
-.stat-busy.hot { color: var(--red); }
-.stat-busy.warm { color: var(--amber); }
-.stat-busy.cold { color: var(--dimmer); }
-
-/* The day's tension gets the only bar up here. */
-.goalrow { margin-top: 9px; }
-.goalbar { height: 4px; background: #0a0d0b; border-radius: 2px; overflow: hidden; }
-.goalbar i { display: block; height: 100%; background: var(--brand); transition: width .25s ease; }
-.goalrow.close .goalbar i { background: var(--amber); }
-.goaltext { display: block; font-size: 12px; color: var(--dim); margin-top: 5px; }
-.goaltext b { color: var(--text); font-weight: 600; }
-.goalrow.close .goaltext b { color: var(--amber); }
-
-/* Warnings appear only when true, so a full row means act. */
-.warnrow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-.warn {
-  font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 11px;
-  background: #2a2416; color: var(--amber);
-}
-.warn.tight { background: #33260f; }
-.warn.bad { background: #2e1a16; color: var(--red); }
-
-/* ---------------------------------------------------------------- tabs */
-
-.tabs { flex: none; display: flex; gap: 2px; padding: 0 12px 8px; }
-.tab {
-  flex: 1; background: none; border: 0; border-radius: 7px;
-  color: var(--dim); font: inherit; font-size: 13.5px; font-weight: 600;
-  padding: 8px 4px; text-align: center; cursor: pointer;
-}
-.tab.on { background: var(--card-2); color: var(--text); }
-.tab i {
-  font-style: normal; font-size: 11px; font-weight: 700;
-  background: var(--brand); color: #062119; border-radius: 9px;
-  padding: 1px 6px; margin-left: 5px;
-}
-.tab.on i { background: var(--brand); }
-.tab:not(.on) i { background: var(--line); color: var(--dim); }
-
-/* ------------------------------------------------------------- day tab */
+/* =================================================================== day */
 
 .dayrows { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 5px; overflow: hidden; }
 .dr { background: var(--card); padding: 10px 12px; }
 .dr.wide { grid-column: 1 / -1; }
 .dr.bad b { color: var(--red); }
-.dr span { display: block; font-size: 10.5px; letter-spacing: .09em; text-transform: uppercase; color: var(--dimmer); }
+.dr > span { display: block; font-size: 10.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--dimmer); }
 .dr b { display: block; font-size: 16px; font-weight: 650; margin-top: 2px; font-variant-numeric: tabular-nums; }
 .dr b em { font-style: normal; font-size: 12px; font-weight: 400; color: var(--dim); }
-.dr em { font-style: normal; display: block; font-size: 11.5px; color: var(--dimmer); margin-top: 4px; }
+.dr > em { font-style: normal; display: block; font-size: 11.5px; color: var(--dimmer); margin-top: 4px; }
 .minibar { height: 4px; background: #0a0d0b; border-radius: 2px; margin-top: 7px; overflow: hidden; }
 .minibar i { display: block; height: 100%; background: var(--brand); }
 .minibar.low i { background: var(--amber); }
@@ -707,68 +333,64 @@ h2 .slots { display: flex; gap: 3px; margin-left: 2px; }
 .feed li:last-child { border-bottom: 0; }
 .feed li.flag { color: var(--amber); }
 
-/* ------------------------------------------------------------ map pill */
+.endshift { padding: 18px 14px 8px; }
+.endshift button { background: transparent; border: 1px solid var(--line); color: var(--dimmer); font-size: 13px; padding: 11px 14px; width: 100%; }
+.endshift button:hover { color: var(--red); border-color: #4a2620; }
 
-.bubble {
-  position: absolute; top: 12px; left: 12px;
-  display: flex; align-items: center; gap: 8px;
-  background: rgba(10,12,11,.9); border: 1px solid var(--line);
-  border-radius: 20px; padding: 6px 13px 6px 10px; font-size: 12.5px; font-weight: 600;
-}
-
-/* --------------------------------------------------------------- start */
+/* ================================================================= start */
 
 .start { flex: 1; overflow-y: auto; padding: 26px 16px 40px; }
-.start h1 { font-size: 27px; font-weight: 750; letter-spacing: -.03em; margin: 0 0 6px; }
-.start .sub { font-size: 14px; color: var(--dim); line-height: 1.5; margin: 0 0 20px; max-width: 42ch; }
+.start h1 { font-size: 27px; font-weight: 750; letter-spacing: -0.03em; margin: 0 0 6px; }
+.sub { font-size: 14px; color: var(--dim); line-height: 1.5; margin: 0 0 22px; max-width: 42ch; }
 
 /* You cannot sensibly pick a window without seeing when the orders are. */
 .daychart { margin-bottom: 22px; }
-.daychart .bars { display: flex; align-items: flex-end; gap: 2px; height: 62px; }
-.daychart .bars i { flex: 1; background: var(--line); border-radius: 1px 1px 0 0; transition: background .2s; }
-.daychart .bars i.inslot { background: #2c3b34; }
-.daychart .bars i.picked { background: var(--brand); }
-.daychart .axis { display: flex; justify-content: space-between; font-size: 10px; color: var(--dimmer); margin-top: 5px; }
+.bars { display: flex; align-items: flex-end; gap: 2px; height: 62px; }
+.bars i { flex: 1; background: var(--line); border-radius: 1px 1px 0 0; transition: background 0.2s; }
+.bars i.inslot { background: #2c3b34; }
+.bars i.picked { background: var(--brand); }
+.axis { display: flex; justify-content: space-between; font-size: 10px; color: var(--dimmer); margin-top: 5px; }
 
-.slots { display: flex; flex-direction: column; gap: 7px; margin-bottom: 20px; }
+.start .slots { display: flex; flex-direction: column; gap: 7px; margin-bottom: 20px; }
+
+/* Three columns that must not collapse: when, terms, payout. */
 .slot {
-  display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: center;
-  background: var(--card); border: 1px solid var(--line); border-radius: 6px;
-  padding: 12px 14px; cursor: pointer;
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 14px;
+  align-items: center;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 12px 14px;
+  cursor: pointer;
 }
 .slot:hover { border-color: #3c4640; }
 .slot.on { border-color: var(--brand); background: #16211d; }
 .slot-when b { display: block; font-size: 15px; font-weight: 650; }
 .slot-when span { font-size: 12px; color: var(--dim); font-variant-numeric: tabular-nums; }
-.slot-need { font-size: 11.5px; color: var(--dim); text-align: right; line-height: 1.4; }
+.slot-need { font-size: 11.5px; color: var(--dim); text-align: right; line-height: 1.35; }
 .slot-need span { color: var(--dimmer); }
 .slot-pay { font-size: 18px; font-weight: 750; color: var(--brand); font-variant-numeric: tabular-nums; }
 .slot-pay.free { color: var(--dimmer); font-weight: 400; }
 
-.locrow {
-  display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--dim);
-  margin-bottom: 18px;
-}
-.locpin { width: 8px; height: 8px; border-radius: 50%; background: var(--brand); flex: none; box-shadow: 0 0 0 4px rgba(0,227,155,.15); }
+.locrow { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--dim); margin-bottom: 18px; }
+.locpin { width: 8px; height: 8px; border-radius: 50%; background: var(--brand); flex: none; box-shadow: 0 0 0 4px rgba(0, 227, 155, 0.15); }
 .locrow.busy .locpin { background: var(--dimmer); box-shadow: none; }
 
-button.primary {
-  display: block; width: 100%; background: var(--brand); border: 0; border-radius: 6px;
-  color: #062119; font: inherit; font-size: 16px; font-weight: 750;
-  padding: 15px; cursor: pointer; min-height: 56px;
-}
-button.primary:hover { background: #2af0af; }
-.start .foot { font-size: 12px; color: var(--dimmer); text-align: center; margin: 10px 0 0; }
+.primary { display: block; width: 100%; background: var(--brand); border: 0; border-radius: 6px; color: #062119; font-size: 16px; font-weight: 750; padding: 15px; min-height: 56px; }
+.primary:hover { background: #2af0af; }
+.foot { font-size: 12px; color: var(--dimmer); text-align: center; margin: 10px 0 0; }
 
-/* ------------------------------------------------------------- summary */
+/* =============================================================== summary */
 
 .summary { flex: 1; overflow-y: auto; padding: 30px 16px 40px; }
-.eyebrow { font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--dimmer); font-weight: 600; }
-.net { font-size: 48px; font-weight: 750; letter-spacing: -.04em; color: var(--brand); line-height: 1.02; margin: 4px 0 4px; font-variant-numeric: tabular-nums; }
+.eyebrow { font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dimmer); font-weight: 600; }
+.net { font-size: 48px; font-weight: 750; letter-spacing: -0.04em; color: var(--brand); line-height: 1.02; margin: 4px 0; font-variant-numeric: tabular-nums; }
 .netsub { font-size: 13.5px; color: var(--dim); margin: 0 0 22px; }
 .netsub b { color: var(--text); }
 
-/* The guarantee is the loudest thing in a day, so it gets a verdict, not a row. */
+/* Met or missed is the loudest thing in a day, so it gets a verdict. */
 .verdict { border-radius: 6px; padding: 13px 15px; margin-bottom: 10px; }
 .verdict.good { background: #16211d; border: 1px solid var(--brand-deep); }
 .verdict.bad { background: #241715; border: 1px solid #4a2620; }
@@ -777,7 +399,7 @@ button.primary:hover { background: #2af0af; }
 .verdict.bad b { color: var(--red); }
 .verdict span { display: block; font-size: 12.5px; color: var(--dim); margin-top: 3px; line-height: 1.45; }
 
-.ledger { width: 100%; border-collapse: collapse; font-size: 14px; margin: 18px 0 0; }
+.ledger { width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 18px; }
 .ledger td { padding: 9px 0; border-bottom: 1px solid var(--line-soft); }
 .ledger td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
 .ledger td em { font-style: normal; color: var(--dimmer); font-size: 12px; }
@@ -788,3 +410,104 @@ button.primary:hover { background: #2af0af; }
 .aside span { color: var(--amber); }
 .aside.bad { color: var(--red); }
 .summary .primary { margin-top: 24px; }
+
+/* ================================================================== ride */
+
+.ridestage { position: absolute; inset: 0; background: #0d1a24; }
+.ridewrap { position: absolute; inset: 0; overflow: hidden; }
+.ridecanvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+.ridehud {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 14px 16px;
+  pointer-events: none;
+  background: linear-gradient(to bottom, rgba(6, 10, 12, 0.75), transparent);
+}
+.ridedest span { display: block; font-size: 10.5px; letter-spacing: 0.11em; text-transform: uppercase; color: rgba(255, 255, 255, 0.55); }
+.ridedest b { display: block; font-size: 18px; font-weight: 700; letter-spacing: -0.02em; }
+.ridebag { font-size: 12px; color: rgba(255, 255, 255, 0.65); background: rgba(6, 10, 12, 0.6); padding: 5px 10px; border-radius: 12px; }
+
+.ridemeter { position: absolute; top: 0; left: 0; right: 0; height: 3px; background: rgba(255, 255, 255, 0.12); }
+.ridemeter i { display: block; height: 100%; background: var(--brand); }
+
+.ridestats { position: absolute; left: 16px; top: 78px; display: flex; gap: 18px; pointer-events: none; }
+.rs b { display: block; font-size: 22px; font-weight: 700; letter-spacing: -0.02em; line-height: 1; font-variant-numeric: tabular-nums; }
+.rs span { font-size: 10px; letter-spacing: 0.09em; text-transform: uppercase; color: rgba(255, 255, 255, 0.45); }
+.ridestats.late .rs-eta { color: var(--red); }
+
+.ridespeed { position: absolute; right: 16px; top: 74px; text-align: right; pointer-events: none; font-variant-numeric: tabular-nums; }
+.ridespeed b { display: block; font-size: 30px; font-weight: 750; letter-spacing: -0.03em; line-height: 1; }
+.ridespeed span { font-size: 10.5px; letter-spacing: 0.1em; color: rgba(255, 255, 255, 0.5); }
+
+/* A red is a decision: brake and lose four seconds, or run it. */
+.ridelight {
+  position: absolute;
+  left: 50%;
+  top: 140px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(6, 10, 12, 0.72);
+  border-radius: 20px;
+  padding: 6px 14px 6px 10px;
+  pointer-events: none;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.ridelight[hidden] { display: none; }
+.ridelight i { width: 10px; height: 10px; border-radius: 50%; }
+.ridelight.red { color: #ff8f7f; }
+.ridelight.red i { background: #ff4a35; box-shadow: 0 0 0 4px rgba(255, 74, 53, 0.22); }
+.ridelight.green { color: rgba(255, 255, 255, 0.6); }
+.ridelight.green i { background: #38e08a; }
+.ridelight.held { color: var(--amber); }
+.ridelight.held i { background: var(--amber); }
+
+.ridecontrols {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  gap: 10px;
+  padding: 14px 14px calc(18px + env(safe-area-inset-bottom, 0px));
+  touch-action: none;
+}
+.rc {
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(10, 14, 12, 0.55);
+  border-radius: 12px;
+  height: 74px;
+  -webkit-tap-highlight-color: transparent;
+  backdrop-filter: blur(3px);
+}
+.rc:active { background: rgba(255, 255, 255, 0.16); }
+.rc.left, .rc.right { flex: 1; position: relative; }
+/* Chevrons drawn rather than shipped as glyphs, so they scale cleanly. */
+.rc.left::after, .rc.right::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 15px;
+  height: 15px;
+  margin: -8px 0 0 -8px;
+  border-left: 3px solid rgba(255, 255, 255, 0.8);
+  border-bottom: 3px solid rgba(255, 255, 255, 0.8);
+}
+.rc.left::after { transform: rotate(45deg); }
+.rc.right::after { transform: rotate(-135deg); }
+.rc.gas { flex: 1.5; background: rgba(0, 227, 155, 0.9); border-color: transparent; color: #062119; }
+.rc.gas:active { background: #2af0af; }
+.rc.gas span { font-size: 17px; font-weight: 800; letter-spacing: 0.08em; }
+
+.ridehint { position: absolute; left: 0; right: 0; bottom: 104px; text-align: center; font-size: 11.5px; color: rgba(255, 255, 255, 0.45); pointer-events: none; }
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }

@@ -149,7 +149,7 @@ export function offersBlock(state: ShiftState, cfg: GameConfig): string {
 export function bagBlock(state: ShiftState): string {
   const used = state.bag.filter((s) => s.orderId !== null).length;
   const slots = state.bag
-    .map((s) => `<i class="slot ${s.kind.toLowerCase()} ${s.orderId ? "full" : ""}"></i>`)
+    .map((s) => `<i class="bagpip ${s.kind.toLowerCase()} ${s.orderId ? "full" : ""}"></i>`)
     .join("");
 
   if (state.carried.length === 0) {
