@@ -7,6 +7,7 @@ import {
   stepRide,
   type RideInput,
 } from "../src/ride/ride.js";
+import { drawPlayerBike, drawVehicle } from "../src/ride/sprites.js";
 import {
   CAMERA_HEIGHT,
   buildRoad,
@@ -317,5 +318,63 @@ describe("traffic signals", () => {
     playOut(r, FLAT_OUT, 400);
     // Sitting at a light is the light's doing, not the rider's.
     expect(rideResult(r).pace).toBeGreaterThan(0.5);
+  });
+});
+
+describe("vehicle sprites", () => {
+  /**
+   * Sprites are drawn from canvas primitives rather than images, so there is
+   * nothing to load and nothing to licence. These tests check they draw at all
+   * and degrade sensibly — the look itself is only checkable by eye.
+   */
+  const stub = () => {
+    const calls: string[] = [];
+    const ctx = {
+      fillStyle: "",
+      save: () => calls.push("save"),
+      restore: () => calls.push("restore"),
+      translate: () => calls.push("translate"),
+      rotate: () => calls.push("rotate"),
+      fillRect: () => calls.push("fillRect"),
+      beginPath: () => calls.push("beginPath"),
+      ellipse: () => calls.push("ellipse"),
+      arc: () => calls.push("arc"),
+      fill: () => calls.push("fill"),
+      moveTo: () => {},
+      lineTo: () => {},
+      closePath: () => {},
+    } as unknown as CanvasRenderingContext2D;
+    return { ctx, calls };
+  };
+
+  it("draws every kind of vehicle without throwing", () => {
+    for (const kind of ["car", "auto", "truck", "bike", "pothole"] as const) {
+      const { ctx, calls } = stub();
+      expect(() => drawVehicle(ctx, kind, 100, 300, 40, 34)).not.toThrow();
+      expect(calls.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("gives wheeled vehicles round wheels, not just boxes", () => {
+    for (const kind of ["car", "auto", "truck", "bike"] as const) {
+      const { ctx, calls } = stub();
+      drawVehicle(ctx, kind, 100, 300, 40, 34);
+      // Wheels are ellipses; a vehicle made only of rectangles has none.
+      expect(calls.filter((c) => c === "ellipse").length).toBeGreaterThan(0);
+    }
+  });
+
+  it("falls back to a smudge when too far away to show detail", () => {
+    const { ctx, calls } = stub();
+    drawVehicle(ctx, "car", 100, 300, 1.5, 1.2);
+    expect(calls).toEqual(["fillRect"]);
+  });
+
+  it("draws the player's bike and always restores the canvas state", () => {
+    const { ctx, calls } = stub();
+    drawPlayerBike(ctx, 200, 400, 60, 0.1, false);
+    expect(calls.filter((c) => c === "save").length).toBe(
+      calls.filter((c) => c === "restore").length,
+    );
   });
 });

@@ -676,3 +676,13 @@ h2 .slots { display: flex; gap: 3px; margin-left: 2px; }
 .ridelight.red { color: #ff8f7f; }
 .ridelight.held { color: #ffb02e; }
 .ridelight.green { color: rgba(255,255,255,.6); }
+
+/* Distance and arrival, counted down in the units a rider thinks in. */
+.ridestats {
+  position: absolute; left: 16px; top: 78px;
+  display: flex; gap: 18px; pointer-events: none;
+}
+.rs b { display: block; font-size: 22px; font-weight: 700; letter-spacing: -.02em; line-height: 1; font-variant-numeric: tabular-nums; }
+.rs span { font-size: 10px; letter-spacing: .09em; text-transform: uppercase; color: rgba(255,255,255,.45); }
+.ridestats.late .rs-eta { color: #ff6a52; }
+.ridestats.late .rs-eta + span { color: rgba(255,106,82,.8); }

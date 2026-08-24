@@ -210,6 +210,19 @@ function render(): void {
  * downstream — deadlines, fuel, the guarantee — is worked out by the simulation
  * exactly as before.
  */
+/**
+ * Minutes until the tightest order this stop serves goes late, or null if this
+ * ride is not serving anything on a clock. Drives the "you are not going to
+ * make this" warning on the ride HUD.
+ */
+function tightestSlack(destId: string): number | null {
+  const serving = state.carried.filter(
+    (c) => (c.leg === "TO_PICKUP" ? c.order.pickupId : c.order.dropId) === destId,
+  );
+  if (serving.length === 0) return null;
+  return Math.min(...serving.map((c) => c.order.dueAt - state.clock));
+}
+
 async function rideTo(destId: string): Promise<void> {
   const km = distance(state.locationId, destId);
   const seconds = Math.max(
@@ -244,7 +257,14 @@ async function rideTo(destId: string): Promise<void> {
       signalWaitSeconds: cfg.signalWaitSeconds,
       signalRunCrashChance: cfg.signalRunCrashChance,
     },
-    { to: node(destId).name, orders: state.carried.length, topSpeedKmh: cfg.rideTopSpeedKmh },
+    {
+      to: node(destId).name,
+      orders: state.carried.length,
+      topSpeedKmh: cfg.rideTopSpeedKmh,
+      km,
+      etaMinutes: rideMinutes(state, state.locationId, destId),
+      slackMinutes: tightestSlack(destId),
+    },
   );
 
   const result = await promise;

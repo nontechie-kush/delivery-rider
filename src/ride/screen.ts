@@ -11,13 +11,13 @@ import {
   type Point,
   type Segment,
 } from "./road.js";
+import { drawPlayerBike, drawVehicle } from "./sprites.js";
 import {
   createRide,
   nextSignal,
   rideResult,
   signalIsRed,
   stepRide,
-  type Hazard,
   type RideOptions,
   type RideResult,
   type RideState,
@@ -42,14 +42,6 @@ const RUMBLE_A = "#c9d1cc";
 const RUMBLE_B = "#7c847f";
 const LANE = "#cfd6d1";
 
-const HAZARD_FILL: Record<Hazard["kind"], string> = {
-  car: "#3f5a7a",
-  auto: "#c9a227",
-  truck: "#6a4a3a",
-  bike: "#4a5a52",
-  pothole: "#141715",
-};
-
 export interface RideHandle {
   cancel: () => void;
 }
@@ -62,7 +54,17 @@ export interface RideHandle {
 export function runRide(
   host: HTMLElement,
   opts: RideOptions,
-  label: { to: string; orders: number; topSpeedKmh: number },
+  label: {
+    to: string;
+    orders: number;
+    topSpeedKmh: number;
+    /** How far the journey is, so the HUD can count it down in kilometres. */
+    km: number;
+    /** Game-minutes the journey should take at a normal pace. */
+    etaMinutes: number;
+    /** Game-minutes until the tightest thing in the bag goes late, if anything is. */
+    slackMinutes: number | null;
+  },
 ): { promise: Promise<RideResult>; handle: RideHandle } {
   const ride = createRide(opts);
 
@@ -74,6 +76,10 @@ export function runRide(
           <span>Riding to</span><b>${label.to}</b>
         </div>
         <div class="ridebag">${label.orders} in the bag</div>
+      </div>
+      <div class="ridestats">
+        <div class="rs"><b class="rs-km">${label.km.toFixed(1)}</b><span>km to go</span></div>
+        <div class="rs"><b class="rs-eta">${Math.round(label.etaMinutes)}</b><span>min out</span></div>
       </div>
       <div class="ridespeed"><b>0</b><span>km/h</span></div>
       <div class="ridelight" hidden><i></i><span></span></div>
@@ -89,6 +95,9 @@ export function runRide(
   const canvas = host.querySelector<HTMLCanvasElement>(".ridecanvas")!;
   const meter = host.querySelector<HTMLElement>(".ridemeter i")!;
   const speedo = host.querySelector<HTMLElement>(".ridespeed b")!;
+  const kmLeft = host.querySelector<HTMLElement>(".rs-km")!;
+  const etaOut = host.querySelector<HTMLElement>(".rs-eta")!;
+  const stats = host.querySelector<HTMLElement>(".ridestats")!;
   const lightBox = host.querySelector<HTMLElement>(".ridelight")!;
   const lightText = host.querySelector<HTMLElement>(".ridelight span")!;
   const ctx = canvas.getContext("2d")!;
@@ -163,6 +172,20 @@ export function runRide(
       draw(ctx, canvas, ride);
       meter.style.width = `${Math.min(100, (ride.z / ride.finishZ) * 100)}%`;
       speedo.textContent = String(Math.round(ride.speed * label.topSpeedKmh));
+
+      // Count the journey down in the units the player thinks in, and project
+      // an arrival from the pace actually being held rather than a fixed guess.
+      const progress = Math.min(1, ride.z / ride.finishZ);
+      const remainingKm = label.km * (1 - progress);
+      kmLeft.textContent = remainingKm.toFixed(1);
+
+      const held = Math.max(0.25, ride.speed);
+      const eta = label.etaMinutes * (1 - progress) * (1 / Math.max(0.6, held));
+      etaOut.textContent = String(Math.max(0, Math.round(eta)));
+
+      // Red when the projection says this one is not going to make it.
+      const willBeLate = label.slackMinutes !== null && eta > label.slackMinutes;
+      stats.className = `ridestats ${willBeLate ? "late" : ""}`;
 
       // Warn about the next light only once it is close enough to act on.
       const ahead = nextSignal(ride);
@@ -379,47 +402,16 @@ function drawHazards(
     if (probe.screen.scale <= 0 || probe.screen.w <= 0) continue;
 
     const sw = probe.screen.w * haz.width * 2.1;
-    const sh = sw * (haz.kind === "truck" ? 1.25 : haz.kind === "pothole" ? 0.18 : 0.85);
+    const sh = sw * (haz.kind === "truck" ? 1.25 : haz.kind === "pothole" ? 0.2 : 0.8);
     if (sw < 1) continue;
 
-    ctx.fillStyle = HAZARD_FILL[haz.kind];
-    ctx.fillRect(probe.screen.x - sw / 2, probe.screen.y - sh, sw, sh);
-
-    if (haz.kind !== "pothole" && sw > 10) {
-      ctx.fillStyle = "rgba(0,0,0,0.4)";
-      ctx.fillRect(probe.screen.x - sw / 2, probe.screen.y - sh + sh * 0.12, sw, sh * 0.3);
-    }
+    drawVehicle(ctx, haz.kind, probe.screen.x, probe.screen.y, sw, sh);
   }
 }
 
 function drawRider(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, ride: RideState): void {
   const { width: w, height: h } = canvas;
-  const bw = w * 0.13;
-  const bh = bw * 1.2;
-  const cx = w / 2;
-  const cy = h * 0.88;
-
-  // Lean into the bend, and wobble when staggered from a hit.
+  // Wobble when staggered from a hit, so a spill reads without a message.
   const lean = ride.stagger > 0 ? Math.sin(ride.elapsed * 42) * 0.18 : 0;
-
-  ctx.save();
-  ctx.translate(cx, cy);
-  ctx.rotate(lean);
-
-  ctx.fillStyle = "rgba(0,0,0,0.45)";
-  ctx.beginPath();
-  ctx.ellipse(0, bh * 0.46, bw * 0.6, bw * 0.14, 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.fillStyle = "#1d2320";
-  ctx.fillRect(-bw * 0.2, -bh * 0.1, bw * 0.4, bh * 0.56);
-
-  // The bag, which is the whole job.
-  ctx.fillStyle = ride.stagger > 0 ? "#c0503f" : "#00e39b";
-  ctx.fillRect(-bw * 0.34, -bh * 0.56, bw * 0.68, bh * 0.46);
-
-  ctx.fillStyle = "#e8ebe3";
-  ctx.fillRect(-bw * 0.15, -bh * 0.82, bw * 0.3, bh * 0.28);
-
-  ctx.restore();
+  drawPlayerBike(ctx, w / 2, h * 0.9, w * 0.15, lean, ride.stagger > 0);
 }
