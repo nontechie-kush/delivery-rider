@@ -1,7 +1,24 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_CONFIG as C } from "../src/sim/config.js";
 import { createRide, rideResult, stepRide, type RideInput } from "../src/ride/ride.js";
-import { buildRoad, curveAhead, project, segmentAt } from "../src/ride/road.js";
+import {
+  CAMERA_HEIGHT,
+  buildRoad,
+  curveAhead,
+  percentRemaining,
+  project,
+  segmentAt,
+  type Point,
+} from "../src/ride/road.js";
+
+/** A world point at a given depth, ready to project. */
+function at(z: number): Point {
+  return {
+    world: { x: 0, y: 0, z },
+    camera: { x: 0, y: 0, z: 0 },
+    screen: { x: 0, y: 0, w: 0, scale: 0 },
+  };
+}
 
 const FLAT_OUT: RideInput = { steer: 0, throttle: true, brake: false };
 const COAST: RideInput = { steer: 0, throttle: false, brake: false };
@@ -32,16 +49,49 @@ describe("the road", () => {
   });
 
   it("shrinks things as they get further away", () => {
-    const near = project(1000, 0, 0, 0, 400, 800);
-    const far = project(20000, 0, 0, 0, 400, 800);
-    expect(near.screenW).toBeGreaterThan(far.screenW);
-    expect(near.scale).toBeGreaterThan(far.scale);
+    const near = at(1000);
+    const far = at(20000);
+    project(near, 0, CAMERA_HEIGHT, 0, 400, 800);
+    project(far, 0, CAMERA_HEIGHT, 0, 400, 800);
+
+    expect(near.screen.w).toBeGreaterThan(far.screen.w);
+    expect(near.screen.scale).toBeGreaterThan(far.screen.scale);
+  });
+
+  /**
+   * The road recedes to a horizon: near segments sit low on the screen, far
+   * ones climb toward the middle. Getting this backwards is what turned the
+   * first version into flat horizontal bands.
+   */
+  it("puts near road low on the screen and far road at the horizon", () => {
+    const near = at(600);
+    const far = at(40000);
+    project(near, 0, CAMERA_HEIGHT, 0, 400, 800);
+    project(far, 0, CAMERA_HEIGHT, 0, 400, 800);
+
+    expect(near.screen.y).toBeGreaterThan(far.screen.y);
+    expect(far.screen.y).toBeGreaterThan(300);
+    expect(far.screen.y).toBeLessThan(500);
+  });
+
+  /** The nearest road is wider than the screen, because you are standing on it. */
+  it("makes the closest road wider than the viewport", () => {
+    const near = at(400);
+    project(near, 0, CAMERA_HEIGHT, 0, 400, 800);
+    expect(near.screen.w).toBeGreaterThan(200);
   });
 
   it("never divides by zero at the camera plane", () => {
-    const p = project(0, 0, 0, 0, 400, 800);
-    expect(Number.isFinite(p.screenX)).toBe(true);
-    expect(Number.isFinite(p.screenW)).toBe(true);
+    const p = at(0);
+    project(p, 0, CAMERA_HEIGHT, 0, 400, 800);
+    expect(Number.isFinite(p.screen.x)).toBe(true);
+    expect(Number.isFinite(p.screen.w)).toBe(true);
+    expect(Number.isFinite(p.screen.y)).toBe(true);
+  });
+
+  it("reports how far through a segment a depth sits", () => {
+    expect(percentRemaining(0)).toBeCloseTo(0, 6);
+    expect(percentRemaining(100)).toBeCloseTo(0.5, 6);
   });
 
   it("reports a bend when there is one", () => {

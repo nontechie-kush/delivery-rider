@@ -1,9 +1,14 @@
 import {
+  CAMERA_DEPTH,
+  CAMERA_HEIGHT,
   DRAW_DISTANCE,
+  LANES,
   ROAD_WIDTH,
   SEGMENT_LENGTH,
+  percentRemaining,
   project,
   segmentAt,
+  type Point,
   type Segment,
 } from "./road.js";
 import {
@@ -181,120 +186,169 @@ function resize(canvas: HTMLCanvasElement): void {
   }
 }
 
+function polygon(
+  ctx: CanvasRenderingContext2D,
+  x1: number, y1: number, x2: number, y2: number,
+  x3: number, y3: number, x4: number, y4: number,
+  fill: string,
+): void {
+  ctx.fillStyle = fill;
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x2, y2);
+  ctx.lineTo(x3, y3);
+  ctx.lineTo(x4, y4);
+  ctx.closePath();
+  ctx.fill();
+}
+
+/**
+ * Draws the road from nearest segment to furthest, clipping each against the
+ * highest thing already drawn. Front to back with clipping is what stops far
+ * segments painting over near ones, and it is why this runs at all on a phone.
+ */
 function draw(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, ride: RideState): void {
   const { width: w, height: h } = canvas;
 
   ctx.fillStyle = SKY;
-  ctx.fillRect(0, 0, w, h / 2);
+  ctx.fillRect(0, 0, w, h);
 
   const base = segmentAt(ride.road, ride.z);
-  const baseIndex = base.index;
-  let curveX = 0;
-  let curveDx = 0;
-  let maxY = h;
+  const basePercent = percentRemaining(ride.z);
+  const playerX = ride.x * ROAD_WIDTH;
 
-  // Back to front, so nearer segments paint over further ones.
-  const strips: { seg: Segment; y: number; wide: number; x: number }[] = [];
+  let maxy = h;
+  let x = 0;
+  let dx = -(base.curve * basePercent);
 
-  for (let i = 0; i < DRAW_DISTANCE; i++) {
-    const seg = ride.road[(baseIndex + i) % ride.road.length]!;
-    const z = baseIndex * SEGMENT_LENGTH + i * SEGMENT_LENGTH;
-    const p = project(z, curveX, ride.z, ride.x * ROAD_WIDTH, w, h);
+  for (let n = 0; n < DRAW_DISTANCE; n++) {
+    const seg = ride.road[(base.index + n) % ride.road.length]!;
+    // Segments that wrapped past the end of the array sit behind the camera in
+    // world terms; shift them forward so they project ahead of it.
+    const loops = Math.floor((base.index + n) / ride.road.length);
+    const zOffset = loops * ride.road.length * SEGMENT_LENGTH;
 
-    curveDx += seg.curve;
-    curveX += curveDx;
+    seg.p1.world.z = (seg.index * SEGMENT_LENGTH) + zOffset;
+    seg.p2.world.z = ((seg.index + 1) * SEGMENT_LENGTH) + zOffset;
+    seg.clip = maxy;
 
-    if (p.screenY >= maxY) continue;
-    maxY = p.screenY;
-    strips.push({ seg, y: p.screenY, wide: p.screenW, x: p.screenX });
+    project(seg.p1, playerX - x, CAMERA_HEIGHT, ride.z, w, h);
+    project(seg.p2, playerX - x - dx, CAMERA_HEIGHT, ride.z, w, h);
+
+    x += dx;
+    dx += seg.curve;
+
+    if (seg.p1.camera.z <= CAMERA_DEPTH || seg.p2.screen.y >= maxy) continue;
+
+    drawSegment(ctx, w, seg);
+    maxy = seg.p2.screen.y;
   }
 
-  for (let i = strips.length - 1; i >= 0; i--) {
-    const s = strips[i]!;
-    const next = strips[i - 1] ?? s;
-    const top = s.y;
-    const bottom = i === 0 ? h : next.y;
-    if (bottom <= top) continue;
-
-    ctx.fillStyle = s.seg.dark ? GROUND_A : GROUND_B;
-    ctx.fillRect(0, top, w, bottom - top);
-
-    // Rumble strips read as edges and give the speed somewhere to register.
-    const rumble = s.wide * 1.13;
-    ctx.fillStyle = s.seg.dark ? RUMBLE_A : RUMBLE_B;
-    ctx.fillRect(s.x - rumble, top, rumble * 2, bottom - top);
-
-    ctx.fillStyle = s.seg.dark ? ROAD_A : ROAD_B;
-    ctx.fillRect(s.x - s.wide, top, s.wide * 2, bottom - top);
-
-    if (s.seg.dark && s.wide > 6) {
-      ctx.fillStyle = LANE;
-      const laneW = Math.max(1, s.wide * 0.02);
-      for (const off of [-0.34, 0.34]) {
-        ctx.fillRect(s.x + s.wide * off - laneW / 2, top, laneW, bottom - top);
-      }
-    }
-  }
-
-  drawHazards(ctx, canvas, ride);
+  drawHazards(ctx, canvas, ride, playerX);
   drawRider(ctx, canvas, ride);
 }
 
-function drawHazards(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, ride: RideState): void {
+function drawSegment(ctx: CanvasRenderingContext2D, width: number, seg: Segment): void {
+  const p1 = seg.p1.screen;
+  const p2 = seg.p2.screen;
+
+  // Verge either side of the tarmac.
+  ctx.fillStyle = seg.dark ? GROUND_A : GROUND_B;
+  ctx.fillRect(0, p2.y, width, p1.y - p2.y);
+
+  const r1 = (p1.w / Math.max(6, 2 * LANES)) * 1.4;
+  const r2 = (p2.w / Math.max(6, 2 * LANES)) * 1.4;
+  const rumble = seg.dark ? RUMBLE_A : RUMBLE_B;
+
+  polygon(ctx, p1.x - p1.w - r1, p1.y, p1.x - p1.w, p1.y, p2.x - p2.w, p2.y, p2.x - p2.w - r2, p2.y, rumble);
+  polygon(ctx, p1.x + p1.w + r1, p1.y, p1.x + p1.w, p1.y, p2.x + p2.w, p2.y, p2.x + p2.w + r2, p2.y, rumble);
+  polygon(ctx, p1.x - p1.w, p1.y, p1.x + p1.w, p1.y, p2.x + p2.w, p2.y, p2.x - p2.w, p2.y, seg.dark ? ROAD_A : ROAD_B);
+
+  // Lane markings only on the light bands, so they dash as the road moves.
+  if (!seg.dark) return;
+  const l1 = (p1.w / Math.max(6, LANES)) * 0.06;
+  const l2 = (p2.w / Math.max(6, LANES)) * 0.06;
+  const lane1 = (p1.w * 2) / LANES;
+  const lane2 = (p2.w * 2) / LANES;
+  let lx1 = p1.x - p1.w + lane1;
+  let lx2 = p2.x - p2.w + lane2;
+
+  for (let lane = 1; lane < LANES; lane++) {
+    polygon(ctx, lx1 - l1, p1.y, lx1 + l1, p1.y, lx2 + l2, p2.y, lx2 - l2, p2.y, LANE);
+    lx1 += lane1;
+    lx2 += lane2;
+  }
+}
+
+function drawHazards(
+  ctx: CanvasRenderingContext2D,
+  canvas: HTMLCanvasElement,
+  ride: RideState,
+  playerX: number,
+): void {
   const { width: w, height: h } = canvas;
 
+  // Furthest first, so nearer traffic paints over it.
   const visible = ride.hazards
-    .filter((haz) => haz.z > ride.z - 200 && haz.z < ride.z + DRAW_DISTANCE * SEGMENT_LENGTH)
+    .filter((haz) => haz.z > ride.z + 60 && haz.z < ride.z + DRAW_DISTANCE * SEGMENT_LENGTH * 0.35)
     .sort((a, b) => b.z - a.z);
 
-  for (const haz of visible) {
-    const p = project(haz.z, 0, ride.z, ride.x * ROAD_WIDTH, w, h);
-    if (p.scale <= 0 || p.screenW <= 0) continue;
+  const probe: Point = {
+    world: { x: 0, y: 0, z: 0 },
+    camera: { x: 0, y: 0, z: 0 },
+    screen: { x: 0, y: 0, w: 0, scale: 0 },
+  };
 
-    const sw = p.screenW * haz.width * 1.9;
-    const sh = sw * (haz.kind === "truck" ? 1.15 : haz.kind === "pothole" ? 0.22 : 0.82);
-    const sx = p.screenX + p.screenW * haz.x;
-    const sy = p.screenY - sh;
+  for (const haz of visible) {
+    probe.world.x = haz.x * ROAD_WIDTH;
+    probe.world.y = 0;
+    probe.world.z = haz.z;
+    project(probe, playerX, CAMERA_HEIGHT, ride.z, w, h);
+
+    if (probe.screen.scale <= 0 || probe.screen.w <= 0) continue;
+
+    const sw = probe.screen.w * haz.width * 2.1;
+    const sh = sw * (haz.kind === "truck" ? 1.25 : haz.kind === "pothole" ? 0.18 : 0.85);
+    if (sw < 1) continue;
 
     ctx.fillStyle = HAZARD_FILL[haz.kind];
-    ctx.fillRect(sx - sw / 2, sy, sw, sh);
+    ctx.fillRect(probe.screen.x - sw / 2, probe.screen.y - sh, sw, sh);
 
-    if (haz.kind !== "pothole" && sw > 8) {
-      // A dark band reads as a windscreen and tells you which way it faces.
-      ctx.fillStyle = "rgba(0,0,0,0.35)";
-      ctx.fillRect(sx - sw / 2, sy + sh * 0.14, sw, sh * 0.3);
+    if (haz.kind !== "pothole" && sw > 10) {
+      ctx.fillStyle = "rgba(0,0,0,0.4)";
+      ctx.fillRect(probe.screen.x - sw / 2, probe.screen.y - sh + sh * 0.12, sw, sh * 0.3);
     }
   }
 }
 
 function drawRider(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, ride: RideState): void {
   const { width: w, height: h } = canvas;
-  const bw = w * 0.11;
-  const bh = bw * 1.25;
+  const bw = w * 0.13;
+  const bh = bw * 1.2;
   const cx = w / 2;
-  const cy = h * 0.9;
+  const cy = h * 0.88;
 
   // Lean into the bend, and wobble when staggered from a hit.
-  const lean = ride.stagger > 0 ? Math.sin(ride.elapsed * 40) * 0.16 : 0;
+  const lean = ride.stagger > 0 ? Math.sin(ride.elapsed * 42) * 0.18 : 0;
 
   ctx.save();
   ctx.translate(cx, cy);
   ctx.rotate(lean);
 
-  ctx.fillStyle = "rgba(0,0,0,0.4)";
+  ctx.fillStyle = "rgba(0,0,0,0.45)";
   ctx.beginPath();
-  ctx.ellipse(0, bh * 0.5, bw * 0.62, bw * 0.16, 0, 0, Math.PI * 2);
+  ctx.ellipse(0, bh * 0.46, bw * 0.6, bw * 0.14, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // The bag, which is the whole job, sat above the rear wheel.
-  ctx.fillStyle = ride.stagger > 0 ? "#c0503f" : "#00e39b";
-  ctx.fillRect(-bw * 0.36, -bh * 0.62, bw * 0.72, bh * 0.5);
-
   ctx.fillStyle = "#1d2320";
-  ctx.fillRect(-bw * 0.22, -bh * 0.16, bw * 0.44, bh * 0.62);
+  ctx.fillRect(-bw * 0.2, -bh * 0.1, bw * 0.4, bh * 0.56);
+
+  // The bag, which is the whole job.
+  ctx.fillStyle = ride.stagger > 0 ? "#c0503f" : "#00e39b";
+  ctx.fillRect(-bw * 0.34, -bh * 0.56, bw * 0.68, bh * 0.46);
 
   ctx.fillStyle = "#e8ebe3";
-  ctx.fillRect(-bw * 0.16, -bh * 0.9, bw * 0.32, bh * 0.3);
+  ctx.fillRect(-bw * 0.15, -bh * 0.82, bw * 0.3, bh * 0.28);
 
   ctx.restore();
 }
