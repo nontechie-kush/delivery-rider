@@ -1,56 +1,56 @@
 {
   "shifts": 1000,
   "seed": 42,
-  "checksum": "e2b109c0",
+  "checksum": "12f3a8f5",
   "selective": {
     "shifts": 1000,
-    "delivered": 26695,
-    "onTime": 25943,
-    "late": 752,
-    "fees": 640758,
-    "milestones": 680450,
-    "net": 863047,
-    "waiting": 61528.554695938736,
-    "waitingHidden": 14526.070385552131,
-    "undelivered": 1366,
+    "delivered": 28652,
+    "onTime": 27279,
+    "late": 1373,
+    "fees": 699965,
+    "milestones": 791550,
+    "net": 988138,
+    "waiting": 61890.82020660316,
+    "waitingHidden": 13965.906929513974,
+    "undelivered": 0,
     "hits": [
       1000,
-      991,
-      306
+      993,
+      490
     ]
   },
   "greedy": {
     "shifts": 1000,
-    "delivered": 32336,
-    "onTime": 20532,
-    "late": 11804,
-    "fees": 712256,
-    "milestones": 403250,
-    "net": 605330,
-    "waiting": 38003.03640459554,
-    "waitingHidden": 8623.78264594185,
-    "undelivered": 3280,
+    "delivered": 34303,
+    "onTime": 22980,
+    "late": 11323,
+    "fees": 766315,
+    "milestones": 514900,
+    "net": 732146,
+    "waiting": 41987.03451499346,
+    "waitingHidden": 9253.744962773764,
+    "undelivered": 0,
     "hits": [
-      972,
-      583,
-      89
+      993,
+      785,
+      152
     ]
   },
   "solo": {
     "shifts": 1000,
-    "delivered": 23764,
-    "onTime": 23096,
-    "late": 668,
-    "fees": 636108,
-    "milestones": 500850,
-    "net": 671881,
-    "waiting": 52074.06368886275,
-    "waitingHidden": 11659.57283585988,
-    "undelivered": 500,
+    "delivered": 25789,
+    "onTime": 24757,
+    "late": 1032,
+    "fees": 681910,
+    "milestones": 571750,
+    "net": 756171,
+    "waiting": 54408.20023571072,
+    "waitingHidden": 11753.448552993912,
+    "undelivered": 0,
     "hits": [
       1000,
-      927,
-      44
+      989,
+      126
     ]
   }
 }

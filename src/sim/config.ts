@@ -139,7 +139,12 @@ export interface GameConfig {
   milestones: readonly { orders: number; bonus: number }[];
   /** Fraction of the fee paid when a delivery lands late. */
   latePayFactor: number;
-  /** Fixed daily cost — phone data, bag rental. */
+  /**
+   * Fixed daily cost, whatever the rider does: data, the bag, and the rent on
+   * the scooter. Renting is common in Delhi NCR at ₹200-350 a day, so ₹180 is
+   * conservative — and it is the difference between expenses landing at 25% of
+   * gross and the 32% riders actually report.
+   */
   dailyExpenses: number;
 
   /* -------------------------------------------------------------- duty */
@@ -251,7 +256,17 @@ export const DEFAULT_CONFIG: GameConfig = {
     // Boring, safe, and it occupies a slot for a very long time. That is the cost.
     SCHEDULED: { base: 16, perKm: 6, freeKm: 3, window: 95, weight: 2, maxDistance: 99 },
   },
-  offerIntervalMean: 23,
+  // Gap at demand 1.0. The curve divides this, so the lunch peak runs ~4x faster.
+  //
+  // Swept against the earnings data rather than guessed. At 33 a diligent rider
+  // does ~29 orders a day for about ₹1,485 gross and ₹983 net — ₹38.6k gross and
+  // ₹25.6k net over 26 days, inside the measured ₹25-40k and ₹18-27k bands and
+  // at the top of both, which is where a game should sit: good at the job rather
+  // than fantasising about it.
+  //
+  // At 23 the same rider did 34 orders for ₹36k net a month, well past what the
+  // work actually pays, and cleared the top bonus on nine days in ten.
+  offerIntervalMean: 33,
   offerLifetime: 12,
   // Dispatch assigns from stores near the rider, which is why riders cluster at
   // hotspots. Uniform selection had them criss-crossing the whole zone.
@@ -267,7 +282,7 @@ export const DEFAULT_CONFIG: GameConfig = {
     { orders: 28, bonus: 600 },
   ],
   latePayFactor: 0.5,
-  dailyExpenses: 80,
+  dailyExpenses: 180,
 
   /**
    * Bookable slots with payout floors, as Zepto and Blinkit run them. Committing
