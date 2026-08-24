@@ -1,4 +1,5 @@
-import { BOUNDS, NODES, ROADS, node } from "../sim/city.js";
+import { BOUNDS, NODES, PICKUPS, ROADS, node } from "../sim/city.js";
+import { demandAt } from "../sim/config.js";
 import type { ShiftState } from "../sim/shift.js";
 import { esc, urgency } from "./format.js";
 
@@ -34,7 +35,32 @@ function pendingStops(state: ShiftState): Map<string, Pending> {
   return stops;
 }
 
-export function renderMap(state: ShiftState, previewOrderId: string | null): string {
+/**
+ * Heat around each pickup: how much work that corner is throwing off right now.
+ *
+ * Dispatch offers from the stores nearest the rider, so where the orders are is
+ * genuinely positional information — and the reason riders cluster at hotspots
+ * between jobs rather than parking wherever they finished.
+ */
+function heatLayer(state: ShiftState): string {
+  const demand = demandAt(state.clock, state.cfg);
+
+  return PICKUPS.map((p) => {
+    // Recent offers from this pickup, as a stand-in for how hot it is.
+    const recent = state.offers.filter((o) => o.pickupId === p.id).length;
+    const heat = Math.min(1, (demand / 4.4) * 0.7 + recent * 0.18);
+    if (heat < 0.06) return "";
+
+    return `<circle class="heat" cx="${p.x.toFixed(2)}" cy="${p.y.toFixed(2)}"
+              r="${(1.1 + heat * 2.6).toFixed(2)}" opacity="${(heat * 0.5).toFixed(2)}" />`;
+  }).join("");
+}
+
+export function renderMap(
+  state: ShiftState,
+  previewOrderId: string | null,
+  showHeat = false,
+): string {
   const stops = pendingStops(state);
   const here = node(state.locationId);
   const preview = previewOrderId
@@ -134,6 +160,7 @@ export function renderMap(state: ShiftState, previewOrderId: string | null): str
   return `
     <svg class="map" viewBox="${minX.toFixed(2)} ${minY.toFixed(2)} ${width.toFixed(2)} ${height.toFixed(2)}"
          preserveAspectRatio="xMidYMid meet" role="group" aria-label="Gurgaon delivery area">
+      ${showHeat ? `<g class="heatmap">${heatLayer(state)}</g>` : ""}
       <g class="roads">${roads}</g>
       <g class="legs">${routes}${previewLine}</g>
       <g class="nodes">${dots}</g>

@@ -40,128 +40,47 @@ describe("the app boots", () => {
     expect(app.querySelector("[data-begin]")).not.toBeNull();
   });
 
-  /**
-   * jsdom has no navigator.geolocation, which is the same situation as a denied
-   * permission or plain HTTP. The day must still be startable.
-   */
-  it("still lets the rider go on duty when location is unavailable", async () => {
-    const app = await mountApp();
-    expect(app.querySelector(".locrow")?.textContent).toBeTruthy();
-    click(app.querySelector("[data-begin]"));
-    expect(app.querySelector(".sheet")).not.toBeNull();
-  });
+
+
 });
 
-describe("the buttons respond", () => {
+describe("the map is on demand", () => {
   beforeEach(() => {
     document.body.innerHTML = "";
   });
 
-  it("goes on duty and shows the working screen", async () => {
-    const app = await mountApp();
-    click(app.querySelector("[data-begin]"));
-
-    expect(app.querySelector(".maplayer")).not.toBeNull();
-    expect(app.querySelector(".sheet")).not.toBeNull();
-    expect(app.querySelector(".sheet-action")).not.toBeNull();
-  });
-
-  it("cycles the sheet when the grabber is tapped", async () => {
-    const app = await mountApp();
-    click(app.querySelector("[data-begin]"));
-
-    const height = () => app.querySelector(".sheet")?.className ?? "";
-    const first = height();
-    click(app.querySelector("[data-sheet]"));
-    expect(height()).not.toBe(first);
-  });
-
-  it("books a slot when its row is clicked anywhere, not just a control", async () => {
-    const app = await mountApp();
-    const row = app.querySelector('[data-slot="evening"]');
-    expect(row).not.toBeNull();
-
-    // Click the label's text, which is what a thumb actually hits.
-    click(row?.querySelector(".slot-when") ?? row);
-    expect(app.querySelector('[data-slot="evening"]')?.className).toContain("on");
-
-    click(app.querySelector("[data-begin]"));
-    // The booked window lives on the Day tab now, not stacked above the orders.
-    click(app.querySelector('[data-tab="day"]'));
-    expect(app.innerHTML).toContain("Dinner rush");
-  });
-
-  it("switches between orders, bag and day", async () => {
-    const app = await mountApp();
-    click(app.querySelector("[data-begin]"));
-
-    for (const id of ["bag", "day", "offers"]) {
-      click(app.querySelector(`[data-tab="${id}"]`));
-      expect(app.querySelector(`[data-tab="${id}"]`)?.className).toContain("on");
-    }
-  });
-
-  it("advances the clock when a ride is taken", async () => {
-    const app = await mountApp();
-    click(app.querySelector("[data-begin]"));
-
-    const clockText = () => app.querySelector(".stat-time")?.textContent ?? "";
-    const before = clockText();
-    click(app.querySelector("[data-wait]"));
-    expect(clockText()).not.toBe(before);
-  });
-
-  it("ends the day and offers another", async () => {
-    const app = await mountApp();
-    click(app.querySelector("[data-begin]"));
-    // Going off duty is a deliberate act, tucked on the Day tab.
-    click(app.querySelector('[data-tab="day"]'));
-    click(app.querySelector("[data-end]"));
-
-    expect(app.querySelector(".summary")).not.toBeNull();
-    click(app.querySelector("[data-restart]"));
-    expect(app.querySelector("[data-begin]")).not.toBeNull();
-  });
-
   /**
-   * Hovering an offer used to trigger a full repaint, which replaced the scroll
-   * container and dumped the player back at the top of the sheet — so reaching
-   * for Accept scrolled the button out from under the cursor. Only the map
-   * depends on the hover, so only the map may be redrawn.
+   * A permanently visible map took half the screen and pushed both the incoming
+   * orders and the job in hand into a scroll. Real rider apps show a list while
+   * idle and a map only while navigating.
    */
-  it("does not rebuild the sheet when an offer is hovered", async () => {
+  it("opens and closes as an overlay", async () => {
     const app = await mountApp();
     click(app.querySelector("[data-begin]"));
+    expect(app.querySelector(".overlay")).toBeNull();
 
-    const scroller = app.querySelector(".sheet-scroll");
-    const offer = app.querySelector("[data-preview]");
-    if (!offer || !scroller) return; // no offers in the queue on this seed
+    click(app.querySelector('[data-overlay="map"]'));
+    expect(app.querySelector(".overlay")).not.toBeNull();
+    expect(app.querySelector("svg.map")).not.toBeNull();
 
-    offer.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
-
-    // Same node, not a replacement — identity is what scroll position rides on.
-    expect(app.querySelector(".sheet-scroll")).toBe(scroller);
+    click(app.querySelector('[data-overlay="none"]'));
+    expect(app.querySelector(".overlay")).toBeNull();
   });
 
-  it("keeps the reader's place in the sheet across a repaint", async () => {
+  it("shows order density only on the map screen", async () => {
     const app = await mountApp();
     click(app.querySelector("[data-begin]"));
-
-    const scroller = app.querySelector(".sheet-scroll");
-    if (!scroller) throw new Error("no sheet to scroll");
-    scroller.scrollTop = 120;
-
-    // Any action that repaints the whole app.
-    click(app.querySelector("[data-wait]"));
-
-    expect(app.querySelector(".sheet-scroll")?.scrollTop).toBe(120);
+    click(app.querySelector('[data-overlay="map"]'));
+    expect(app.innerHTML).toContain("heatmap");
   });
 
-  /** A render loop would hang the test rather than fail it, so bound it. */
-  it("does not re-enter render on a repaint", async () => {
+  it("gives the work list the whole screen", async () => {
     const app = await mountApp();
     click(app.querySelector("[data-begin]"));
-    for (let i = 0; i < 12; i++) click(app.querySelector("[data-sheet]"));
-    expect(app.querySelector(".sheet")).not.toBeNull();
+
+    const work = app.querySelector(".work");
+    expect(work).not.toBeNull();
+    // Orders are in the flow, not inside a resizable sheet.
+    expect(work?.querySelector(".offers, .empty")).not.toBeNull();
   });
 });

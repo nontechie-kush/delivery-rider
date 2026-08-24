@@ -208,7 +208,7 @@ export function actionBlock(state: ShiftState): string {
   if (canRefill(state)) {
     const restored = vehicle.rangeKm - state.rangeLeft;
     const billed = vehicle.refillIsWholeUnit ? vehicle.rangeKm : restored;
-    return `<div class="sheet-action">
+    return `<div class="actionbar">
       <button class="go" data-refill="1">
         <span class="golabel">${vehicle.refillIsWholeUnit ? "Swap battery" : "Fill up"}</span>
         <span class="gometa">${rupees(energyCost(billed, vehicle))} · ${vehicle.refillMinutes} min · back to ${Math.round(vehicle.rangeKm)} km</span>
@@ -218,7 +218,7 @@ export function actionBlock(state: ShiftState): string {
   }
 
   if (!best) {
-    return `<div class="sheet-action">
+    return `<div class="actionbar">
       <button class="wait wide" data-wait="15">Wait 15 min</button>
       <button class="wait" data-wait="40">40 min</button>
     </div>`;
@@ -229,7 +229,7 @@ export function actionBlock(state: ShiftState): string {
     (c) => (c.leg === "TO_PICKUP" ? c.order.pickupId : c.order.dropId) === id,
   ).length;
 
-  return `<div class="sheet-action">
+  return `<div class="actionbar">
     <button class="go" data-go="${esc(id)}">
       <span class="golabel">Ride to ${esc(node(id).name)}</span>
       <span class="gometa">${mins(rideMinutes(state, state.locationId, id))}${

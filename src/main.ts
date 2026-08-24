@@ -17,9 +17,11 @@ import { esc } from "./ui/format.js";
 import { renderMap } from "./ui/map.js";
 import { launchRide } from "./ride/launch.js";
 import { locateMessage, locateRider } from "./ui/locate.js";
-import { actionBlock, bagBlock, offersBlock, tabBar, type Tab } from "./ui/panels.js";
+import { actionBlock, offersBlock } from "./ui/panels.js";
+import { jobBlock, outcomeScreen } from "./ui/job.js";
 import { startScreen, summaryScreen } from "./ui/screens.js";
 import { dayBlock, statusStrip } from "./ui/status.js";
+import type { Completed } from "./sim/shift.js";
 
 /**
  * NOW Partner — the rider app of a fictional quick-commerce platform.
@@ -35,16 +37,16 @@ const cfg = DEFAULT_CONFIG;
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("#app not found");
 
-type SheetState = "peek" | "half" | "full";
-const SHEET_ORDER: SheetState[] = ["peek", "half", "full"];
 
-type Phase = "start" | "working" | "riding" | "done";
+type Phase = "start" | "working" | "riding" | "outcome" | "done";
+type Overlay = "none" | "map" | "day";
 
 let state: ShiftState = createShift(Math.floor(Math.random() * 1e9), cfg);
 let phase: Phase = "start";
 let preview: string | null = null;
-let sheet: SheetState = "half";
-let tab: Tab = "offers";
+let overlay: Overlay = "none";
+/** Deliveries that landed on the ride just finished, shown once then cleared. */
+let landed: Completed[] = [];
 
 /** Where the rider actually is, resolved once at the start of the day. */
 let startNodeId = "qk";
@@ -73,17 +75,40 @@ async function findRider(): Promise<void> {
  * and earnings, always visible, never in the way of the map.
  */
 /**
- * A single pill saying where the rider is. Everything it used to carry —
- * earnings, clock, how busy it is — now lives in the status strip, where it is
- * readable rather than crammed over a map.
+ * The map, on demand.
+ *
+ * It used to occupy the upper half of the screen permanently, which pushed both
+ * the incoming orders and the job in hand into a scroll. Real rider apps show a
+ * list while idle and a map while navigating — so it lives behind a button now,
+ * and earns the whole screen when opened.
  */
-function bubble(): string {
-  return `<div class="bubble"><span class="pulse" aria-hidden="true"></span>
-    <span>${esc(node(state.locationId).name)}</span></div>`;
+function mapOverlay(): string {
+  return `
+    <div class="overlay">
+      <div class="ov-head">
+        <div>
+          <b>Where the orders are</b>
+          <span>Brighter means busier. Tap a place to ride there.</span>
+        </div>
+        <button class="ov-close" data-overlay="none" aria-label="Close">Close</button>
+      </div>
+      <div class="ov-map">${renderMap(state, preview, true)}</div>
+      <div class="ov-foot"><span class="pulse"></span> You're at ${esc(node(state.locationId).name)}</div>
+    </div>`;
 }
 
-function mapLayer(): string {
-  return `<div class="maplayer">${renderMap(state, preview)}${bubble()}</div>`;
+function dayOverlay(): string {
+  return `
+    <div class="overlay">
+      <div class="ov-head">
+        <div><b>Today</b><span>Earnings, fuel and your booked window.</span></div>
+        <button class="ov-close" data-overlay="none" aria-label="Close">Close</button>
+      </div>
+      <div class="ov-body">
+        ${dayBlock(state, cfg)}
+        <div class="endshift"><button data-end="1">Go off duty</button></div>
+      </div>
+    </div>`;
 }
 
 function beginDay(): void {
@@ -100,7 +125,6 @@ function beginDay(): void {
 
   startDuty(state);
   phase = "working";
-  sheet = "half";
   render();
 }
 
@@ -124,7 +148,7 @@ function render(): void {
 
   // A full repaint replaces the scroll container, which would otherwise dump
   // the player back at the top of the sheet after every accept or ride.
-  const scrolled = app.querySelector(".sheet-scroll")?.scrollTop ?? 0;
+  const scrolled = app.querySelector(".work")?.scrollTop ?? 0;
 
   if (phase === "start") {
     app.innerHTML = `
@@ -141,38 +165,41 @@ function render(): void {
     return;
   }
 
+  if (phase === "outcome") {
+    app.innerHTML = `
+      <div class="statusbar"><span class="brand">NOW <em>partner</em></span></div>
+      ${outcomeScreen(state, cfg, landed)}`;
+    return;
+  }
+
   if (phase === "done") {
     app.innerHTML = `<div class="statusbar"><span class="brand">NOW <em>partner</em></span></div>${summaryScreen(state, cfg)}`;
     return;
   }
 
+  // The whole screen goes to the task in hand: the job when carrying something,
+  // the incoming orders when not. The map and the day's numbers are overlays,
+  // because neither is what the player is doing.
   app.innerHTML = `
     <div class="statusbar">
       <span class="brand">NOW <em>partner</em></span>
-      <span class="online"><i aria-hidden="true"></i> On duty</span>
+      <span class="chrome-tools">
+        <button data-overlay="map">Map</button>
+        <button data-overlay="day">Today</button>
+      </span>
     </div>
 
     ${statusStrip(state, cfg)}
 
-    ${mapLayer()}
+    <div class="work">
+      ${jobBlock(state)}
+      ${offersBlock(state, cfg)}
+    </div>
 
-    <div class="sheet ${sheet}">
-      <button class="grabber" data-sheet="cycle" aria-label="Resize panel"><i></i></button>
-      ${tabBar(state, tab)}
-      <div class="sheet-scroll">
-        ${
-          tab === "offers"
-            ? offersBlock(state, cfg)
-            : tab === "bag"
-              ? bagBlock(state)
-              : dayBlock(state, cfg)
-        }
-        ${tab === "day" ? '<div class="endshift"><button data-end="1">Go off duty</button></div>' : ""}
-      </div>
-      ${actionBlock(state)}
-    </div>`;
+    ${actionBlock(state)}
+    ${overlay === "map" ? mapOverlay() : overlay === "day" ? dayOverlay() : ""}`;
 
-  const scroller = app.querySelector(".sheet-scroll");
+  const scroller = app.querySelector(".work");
   if (scroller && scrolled > 0) scroller.scrollTop = scrolled;
 }
 
@@ -194,17 +221,24 @@ async function rideTo(destId: string): Promise<void> {
     destId,
   );
 
+  // Snapshot before arriving, so the outcome beat knows what actually landed.
+  const before = state.completed.length;
   travelTo(state, destId, outcome.extraMinutes);
+  landed = state.completed.slice(before);
   if (outcome.redsRun > 0) {
     state.log.push(
       `Ran ${outcome.redsRun} red light${outcome.redsRun > 1 ? "s" : ""} getting there.`,
     );
   }
 
-  phase = "working";
-  sheet = "peek";
   preview = null;
-  finishIfOver();
+
+  // A delivery is the moment the whole loop builds toward, so it gets a beat
+  // rather than a line in a log. The day ending still wins over it.
+  if (isOver(state)) phase = "done";
+  else if (landed.length > 0) phase = "outcome";
+  else phase = "working";
+
   render();
 }
 
@@ -219,14 +253,21 @@ app.addEventListener("click", (event) => {
   if (!(target instanceof Element)) return;
 
   const hit = target.closest<HTMLElement>(
-    "[data-accept],[data-reject],[data-go],[data-wait],[data-end],[data-restart],[data-sheet],[data-begin],[data-slot],[data-refill],[data-tab]",
+    "[data-accept],[data-reject],[data-go],[data-wait],[data-end],[data-restart],[data-begin],[data-slot],[data-refill],[data-overlay],[data-dismiss]",
   );
   if (!hit) return;
 
   const d = hit.dataset;
 
-  if (d["tab"]) {
-    tab = d["tab"] as Tab;
+  if (d["overlay"]) {
+    overlay = d["overlay"] as Overlay;
+    render();
+    return;
+  }
+
+  if (d["dismiss"]) {
+    landed = [];
+    phase = "working";
     render();
     return;
   }
@@ -239,13 +280,6 @@ app.addEventListener("click", (event) => {
 
   if (d["begin"]) {
     beginDay();
-    return;
-  }
-
-  if (d["sheet"]) {
-    const index = SHEET_ORDER.indexOf(sheet);
-    sheet = SHEET_ORDER[(index + 1) % SHEET_ORDER.length] ?? "half";
-    render();
     return;
   }
 
@@ -271,37 +305,6 @@ app.addEventListener("click", (event) => {
   preview = null;
   finishIfOver();
   render();
-});
-
-/* Dragging the sheet. Delegated so it survives a re-render. */
-let dragFrom: number | null = null;
-let dragStarted: SheetState = "half";
-
-app.addEventListener("pointerdown", (event) => {
-  const target = event.target;
-  if (!(target instanceof Element)) return;
-  if (!target.closest(".grabber")) return;
-  dragFrom = event.clientY;
-  dragStarted = sheet;
-});
-
-app.addEventListener("pointerup", (event) => {
-  if (dragFrom === null) return;
-  const moved = event.clientY - dragFrom;
-  dragFrom = null;
-
-  // Only a deliberate drag changes state; a tap falls through to the click
-  // handler above, which cycles. Both gestures land somewhere sensible.
-  if (Math.abs(moved) < 24) return;
-
-  const index = SHEET_ORDER.indexOf(dragStarted);
-  const next = moved < 0 ? index + 1 : index - 1;
-  const clamped = Math.max(0, Math.min(SHEET_ORDER.length - 1, next));
-  const resolved = SHEET_ORDER[clamped];
-  if (resolved && resolved !== sheet) {
-    sheet = resolved;
-    render();
-  }
 });
 
 // Hovering an offer draws its trip on the map, so "does this fit my route?" is
