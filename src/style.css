@@ -208,16 +208,10 @@ button:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 .tier.EXPRESS { background: #4a2620; color: var(--red); }
 .tier.STANDARD { background: #3d3218; color: var(--amber); }
 .tier.SCHEDULED { background: var(--card-2); color: var(--dim); }
-.countdown { font-size: 11.5px; color: var(--dimmer); font-variant-numeric: tabular-nums; }
 
-.payout { display: flex; align-items: baseline; gap: 9px; margin-bottom: 8px; }
-.payout b { font-size: 27px; font-weight: 750; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
-.payout span { font-size: 12px; color: var(--dim); }
 
-/* A fee means nothing without the cost of reaching it. */
-.fuelline { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; color: var(--dim); border-top: 1px solid var(--line-soft); margin-bottom: 8px; padding-top: 7px; }
-.fuelnums b { color: var(--text); font-weight: 650; }
-.fuelline.thin .fuelnums b { color: var(--amber); }
+.payout { display: flex; align-items: center; justify-content: space-between; gap: 9px; margin-bottom: 8px; }
+
 
 .fit { display: flex; align-items: baseline; gap: 8px; margin: 9px 0 11px; padding-top: 9px; border-top: 1px solid var(--line-soft); font-size: 12px; }
 .fitword { font-weight: 700; letter-spacing: 0.02em; }
@@ -556,3 +550,50 @@ button:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 /* Brighter means busier, which is genuinely positional information: dispatch
    offers from the stores nearest the rider. */
 .map .heat { fill: var(--brand); }
+
+/* ================================================================= icons */
+
+/* Inline SVG at 16px, taking the colour of the text beside it. An icon font
+   would be a network request the CSP has to allow; emoji render differently on
+   every platform, which is no use when a shape has to mean one thing. */
+.icon { flex: none; vertical-align: -2px; }
+.iconline { display: inline-flex; align-items: center; gap: 6px; }
+.iconline .icon { opacity: 0.75; }
+
+/* ------------------------------------------------ fare and what you keep */
+
+/* The fare opens, because "₹28" is an assertion and a rider should be able to
+   check it. */
+.fee {
+  display: inline-flex; align-items: center; gap: 7px;
+  background: none; border: 0; padding: 0; color: inherit;
+}
+.fee b { font-size: 27px; font-weight: 750; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+.fee .icon { color: var(--dimmer); width: 14px; height: 14px; }
+.fee:hover .icon { color: var(--dim); }
+
+.payout-meta { display: flex; gap: 12px; font-size: 12px; color: var(--dim); }
+
+.feebreak { margin: 2px 0 10px; font-size: 12.5px; }
+.feebreak div { display: flex; justify-content: space-between; padding: 4px 0; }
+.feebreak dt { color: var(--dim); margin: 0; }
+.feebreak dd { margin: 0; font-variant-numeric: tabular-nums; }
+.feebreak .feetotal { border-top: 1px solid var(--line-soft); margin-top: 3px; padding-top: 6px; font-weight: 650; }
+.feebreak .feetotal dt { color: var(--text); }
+
+/* Leads with what lands in the rider's pocket. "−₹14 · ₹14 left" was two
+   numbers and no sentence; a rider thinks about what they keep. */
+.keep { margin: 9px 0 10px; }
+.keep-split { height: 5px; border-radius: 3px; background: #3a2c17; overflow: hidden; }
+.keep-yours { display: block; height: 100%; background: var(--brand); }
+.keep.thin .keep-yours { background: var(--amber); }
+.keep-row { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-top: 7px; font-size: 12.5px; }
+.keep-main { color: var(--dim); }
+.keep-main b { color: var(--text); font-weight: 700; font-variant-numeric: tabular-nums; }
+.keep.thin .keep-main b { color: var(--amber); }
+.keep-sub { color: var(--dimmer); font-size: 11.5px; }
+
+/* The countdown says what it is counting, and reddens when it matters. Game
+   time only moves when the rider does, so it is deliberately not a ticker. */
+.countdown { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--dimmer); font-variant-numeric: tabular-nums; }
+.countdown.soon { color: var(--amber); }

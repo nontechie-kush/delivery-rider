@@ -130,6 +130,12 @@ export interface GameConfig {
   offerIntervalMean: number;
   /** How long an unaccepted offer stays in the queue. */
   offerLifetime: number;
+  /**
+   * Least fraction of its window an order arrives with, however long it sat.
+   * Without a floor, an offer taken in its last minute would be late before
+   * the rider moved, which is a trap rather than a decision.
+   */
+  staleOrderFloor: number;
   /** Higher values concentrate offers on nearby pickups. */
   pickupProximityBias: number;
   /** Higher values concentrate drops near their pickup. */
@@ -258,16 +264,18 @@ export const DEFAULT_CONFIG: GameConfig = {
   },
   // Gap at demand 1.0. The curve divides this, so the lunch peak runs ~4x faster.
   //
-  // Swept against the earnings data rather than guessed. At 33 a diligent rider
-  // does ~29 orders a day for about ₹1,485 gross and ₹983 net — ₹38.6k gross and
-  // ₹25.6k net over 26 days, inside the measured ₹25-40k and ₹18-27k bands and
-  // at the top of both, which is where a game should sit: good at the job rather
-  // than fantasising about it.
+  // Swept against the earnings data rather than guessed. At 30 a diligent rider
+  // does ~30 orders a day for about ₹914 net — ₹23.8k a month over 26 days,
+  // mid-way through the measured ₹18-27k and just inside the 20-30 orders riders
+  // actually report. The top bonus lands on 41% of days: a stretch, not a
+  // formality.
   //
-  // At 23 the same rider did 34 orders for ₹36k net a month, well past what the
-  // work actually pays, and cleared the top bonus on nine days in ten.
-  offerIntervalMean: 33,
+  // Retuned from 33 when deadlines moved to run from order placement, which
+  // took a chunk out of every window and pushed take-home to the bottom of the
+  // real range.
+  offerIntervalMean: 30,
   offerLifetime: 12,
+  staleOrderFloor: 0.55,
   // Dispatch assigns from stores near the rider, which is why riders cluster at
   // hotspots. Uniform selection had them criss-crossing the whole zone.
   pickupProximityBias: 1.6,

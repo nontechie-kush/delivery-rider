@@ -75,13 +75,36 @@ describe("accept and reject", () => {
     expect(s.carried[0]?.leg).toBe("TO_PICKUP");
   });
 
-  it("stamps the deadline from acceptance, not from when the offer appeared", () => {
+  /**
+   * The customer was promised a time when they ordered, not when a rider
+   * happened to accept. So the window runs from placement, and an offer that
+   * sat in the queue arrives with less of it left — which is what makes a fresh
+   * order worth more than a stale one.
+   */
+  it("runs the deadline from when the order was placed", () => {
     const s = onDuty(3);
-    idle(s, 30);
     const order = s.offers[0]!;
-    const at = s.clock;
+    const window = E.tiers[order.tier].window;
+    idle(s, 6);
     accept(s, order.id);
-    expect(order.dueAt).toBeCloseTo(at + E.tiers[order.tier].window, 6);
+
+    expect(order.dueAt).toBeCloseTo(order.offeredAt + window, 6);
+    // The six minutes it sat in the queue came out of the rider's window.
+    expect(order.dueAt - s.clock).toBeLessThan(window);
+  });
+
+  it("never hands over an order already out of time", () => {
+    const s = onDuty(4);
+    for (let i = 0; i < 6 && s.offers.length > 0; i++) idle(s, 2);
+    const order = s.offers[0];
+    if (!order) return;
+    accept(s, order.id);
+
+    const left = order.dueAt - s.clock;
+    expect(left).toBeGreaterThan(0);
+    expect(left).toBeGreaterThanOrEqual(
+      E.tiers[order.tier].window * E.staleOrderFloor - 1e-6,
+    );
   });
 
   it("refuses an unknown id", () => {

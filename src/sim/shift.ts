@@ -195,8 +195,18 @@ export function accept(state: ShiftState, id: string): boolean {
   if (!order) return false;
   if (!load(state.bag, order.temp, order.id)) return false;
 
-  // The clock on a delivery starts when the rider takes it, not when it appeared.
-  order.dueAt = state.clock + state.cfg.tiers[order.tier].window;
+  // The customer was promised a time when they ordered, not when a rider
+  // happened to accept. So the window runs from placement, and an offer that
+  // sat in the queue arrives with less of it left — which is what makes a fresh
+  // order worth more than a stale one.
+  //
+  // A small floor, because an offer about to expire should still be takeable
+  // rather than instantly late.
+  const window = state.cfg.tiers[order.tier].window;
+  order.dueAt = Math.max(
+    state.clock + window * state.cfg.staleOrderFloor,
+    order.offeredAt + window,
+  );
 
   state.offers = state.offers.filter((o) => o.id !== id);
   recordAccept(state.duty);

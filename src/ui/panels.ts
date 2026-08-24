@@ -3,6 +3,7 @@ import { energyCost, vehicleOf, type GameConfig } from "../sim/config.js";
 import { distance } from "../sim/city.js";
 import { canAccept, canRefill, rideMinutes, type ShiftState } from "../sim/shift.js";
 import { esc, mins, rupees, urgency } from "./format.js";
+import { icons, withIcon } from "./icons.js";
 import { routeStack } from "./route.js";
 import { estimate, VERDICT_LABEL } from "./verdict.js";
 
@@ -51,12 +52,12 @@ const SLOT_NEED: Record<string, string> = {
 
 
 /**
- * What this trip burns, and what is left of the fee once it has.
+ * What the rider actually keeps.
  *
- * A fee is meaningless without the fuel behind it — a ₹44 order that costs ₹18
- * to reach is a worse deal than a ₹30 one next door, and the app never tells a
- * real rider that. Petrol runs about ₹2.19 a kilometre against ₹0.21 on a swap
- * scooter, which is the entire argument for the vehicle ladder.
+ * This used to read "−₹14 · ₹14 left", which is two numbers and no sentence.
+ * A rider does not think in deductions; they think about what lands in their
+ * pocket. So the kept figure leads and the fuel is the smaller half of it, with
+ * a bar because a fee half-eaten by petrol should be visible before it is read.
  */
 function fuelLine(
   state: ShiftState,
@@ -70,23 +71,38 @@ function fuelLine(
 
   const tripKm = distance(state.locationId, pickupId) + distance(pickupId, dropId);
   const cost = energyCost(tripKm, vehicle);
-  const net = fee - cost;
-  const thin = net < fee * 0.6;
+  const keep = Math.max(0, fee - cost);
+  const keptShare = fee > 0 ? (keep / fee) * 100 : 0;
+  const thin = keep < fee * 0.6;
 
   return `
-    <div class="fuelline ${thin ? "thin" : ""}">
-      <span>Fuel for this trip</span>
-      <span class="fuelnums">−${rupees(cost)} · <b>${rupees(net)} left</b></span>
+    <div class="keep ${thin ? "thin" : ""}">
+      <div class="keep-split">
+        <span class="keep-yours" style="width:${keptShare.toFixed(0)}%"></span>
+      </div>
+      <div class="keep-row">
+        ${withIcon("wallet", `You keep <b>${rupees(keep)}</b>`, "keep-main")}
+        ${withIcon("fuel", `${rupees(cost)} fuel · ${tripKm.toFixed(1)} km`, "keep-sub")}
+      </div>
     </div>`;
 }
 
-function offerCard(state: ShiftState, cfg: GameConfig, orderId: string): string {
+function offerCard(
+  state: ShiftState,
+  cfg: GameConfig,
+  orderId: string,
+  openFee: string | null,
+): string {
   const order = state.offers.find((o) => o.id === orderId);
   if (!order) return "";
 
   const est = estimate(state, order, cfg);
   const room = canAccept(state, order.id);
   const spare = est.window - est.total;
+  const open = openFee === order.id;
+  const tier = cfg.tiers[order.tier];
+  const billableKm = Math.max(0, order.distance - tier.freeKm);
+  const expiring = order.expiresAt - state.clock <= 4;
   const tierWord =
     order.tier === "EXPRESS" ? "Express" : order.tier === "STANDARD" ? "Standard" : "Scheduled";
 
@@ -94,18 +110,36 @@ function offerCard(state: ShiftState, cfg: GameConfig, orderId: string): string 
     <article class="offer ${est.verdict}" data-preview="${esc(order.id)}">
       <div class="offer-head">
         <span class="tier ${order.tier}">${tierWord}</span>
-        <span class="countdown">${mins(order.expiresAt - state.clock)}</span>
+        <span class="countdown ${expiring ? "soon" : ""}">
+          ${icons.clock}<span>gone in ${mins(order.expiresAt - state.clock)}</span>
+        </span>
       </div>
 
       <div class="payout">
-        <b>${rupees(order.fee)}</b>
-        <span>${km(order.distance)} · ${SLOT_NEED[order.temp] ?? ""}</span>
+        <button class="fee" data-fee="${esc(order.id)}" aria-expanded="${open}">
+          <b>${rupees(order.fee)}</b>${icons.info}
+        </button>
+        <span class="payout-meta">
+          ${withIcon("route", km(order.distance))}
+          ${withIcon("bag", SLOT_NEED[order.temp] ?? "")}
+        </span>
       </div>
+
+      ${
+        open
+          ? `<dl class="feebreak">
+               <div><dt>Base fare, ${tierWord.toLowerCase()}</dt><dd>${rupees(tier.base)}</dd></div>
+               <div><dt>First ${tier.freeKm} km</dt><dd>included</dd></div>
+               <div><dt>${billableKm.toFixed(1)} km beyond that × ${rupees(tier.perKm)}</dt><dd>${rupees(billableKm * tier.perKm)}</dd></div>
+               <div class="feetotal"><dt>Offered</dt><dd>${rupees(order.fee)}</dd></div>
+             </dl>`
+          : ""
+      }
       ${fuelLine(state, cfg, order.pickupId, order.dropId, order.fee)}
 
       ${routeStack(order.pickupId, order.dropId, {
         pickupNote: `Ready in about ${mins(order.shownPrep)}`,
-        dropNote: `Deliver within ${mins(est.window)}`,
+        dropNote: `${mins(Math.max(0, order.dueAt - state.clock))} left to deliver`,
       })}
 
       <!-- A real rider glances at an order and simply knows whether it fits. The
@@ -127,7 +161,7 @@ function offerCard(state: ShiftState, cfg: GameConfig, orderId: string): string 
     </article>`;
 }
 
-export function offersBlock(state: ShiftState, cfg: GameConfig): string {
+export function offersBlock(state: ShiftState, cfg: GameConfig, openFee: string | null = null): string {
   if (state.offers.length === 0) {
     return `<section class="block">
       <h2>New orders</h2>
@@ -137,7 +171,7 @@ export function offersBlock(state: ShiftState, cfg: GameConfig): string {
 
   const cards = [...state.offers]
     .sort((a, b) => a.expiresAt - b.expiresAt)
-    .map((o) => offerCard(state, cfg, o.id))
+    .map((o) => offerCard(state, cfg, o.id, openFee))
     .join("");
 
   return `<section class="block">

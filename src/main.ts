@@ -47,6 +47,8 @@ let preview: string | null = null;
 let overlay: Overlay = "none";
 /** Deliveries that landed on the ride just finished, shown once then cleared. */
 let landed: Completed[] = [];
+/** Which offer has its fare breakdown open, if any. */
+let openFee: string | null = null;
 
 /** Where the rider actually is, resolved once at the start of the day. */
 let startNodeId = "qk";
@@ -193,7 +195,7 @@ function render(): void {
 
     <div class="work">
       ${jobBlock(state)}
-      ${offersBlock(state, cfg)}
+      ${offersBlock(state, cfg, openFee)}
     </div>
 
     ${actionBlock(state)}
@@ -253,11 +255,17 @@ app.addEventListener("click", (event) => {
   if (!(target instanceof Element)) return;
 
   const hit = target.closest<HTMLElement>(
-    "[data-accept],[data-reject],[data-go],[data-wait],[data-end],[data-restart],[data-begin],[data-slot],[data-refill],[data-overlay],[data-dismiss]",
+    "[data-accept],[data-reject],[data-go],[data-wait],[data-end],[data-restart],[data-begin],[data-slot],[data-refill],[data-overlay],[data-dismiss],[data-fee]",
   );
   if (!hit) return;
 
   const d = hit.dataset;
+
+  if (d["fee"]) {
+    openFee = openFee === d["fee"] ? null : d["fee"];
+    render();
+    return;
+  }
 
   if (d["overlay"]) {
     overlay = d["overlay"] as Overlay;
@@ -291,6 +299,7 @@ app.addEventListener("click", (event) => {
   if (d["accept"]) accept(state, d["accept"]);
 
   else if (d["reject"]) reject(state, d["reject"]);
+
   else if (d["refill"]) refill(state);
   else if (d["wait"]) idle(state, Number(d["wait"]));
   else if (d["end"]) phase = "done";
@@ -303,6 +312,7 @@ app.addEventListener("click", (event) => {
   } else return;
 
   preview = null;
+  openFee = null;
   finishIfOver();
   render();
 });

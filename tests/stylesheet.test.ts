@@ -90,6 +90,8 @@ describe("the stylesheet", () => {
       "flag", "newest", "hot", "cold", "warm", "bad", "good", "close", "held",
       "red", "green", "pending", "here", "node", "pv-pickup", "pv-drop", "EXPRESS",
       "STANDARD", "SCHEDULED", "wide", "free", "out", "clip", "riding",
+      // Passed to withIcon as a class argument, so the scan cannot see them.
+      "keep-main", "keep-sub",
     ]);
 
     const declared = [...css.matchAll(/^\.([a-zA-Z][\w-]*)/gm)].map((m) => m[1]!);
