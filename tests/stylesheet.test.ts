@@ -48,15 +48,40 @@ function classesInMarkup(): Set<string> {
 }
 
 describe("the stylesheet", () => {
-  it("declares every selector exactly once", () => {
-    const selectors = [...css.matchAll(/([^{}]+)\{/g)]
-      .map((m) => m[1]!.trim().replace(/\s+/g, " "))
-      .filter((s) => s && !s.startsWith("@") && s !== ":root" && s !== "*");
-
+  it("declares every selector exactly once per scope", () => {
+    // Duplicates are counted within their enclosing at-rule, not across the
+    // whole file: `.ridecanvas` at the top level and again inside a
+    // prefers-reduced-motion block is how you turn an animation off, and is not
+    // the bug this guards against. Two declarations in the *same* scope — which
+    // is what silently broke the start screen — still fail.
     const seen = new Map<string, number>();
-    for (const s of selectors) seen.set(s, (seen.get(s) ?? 0) + 1);
-    const duplicated = [...seen].filter(([, n]) => n > 1).map(([s]) => s);
+    const scopes: string[] = [];
+    let buffer = "";
 
+    for (const ch of css) {
+      if (ch === "{") {
+        const head = buffer.trim().replace(/\s+/g, " ");
+        buffer = "";
+        if (head.startsWith("@")) {
+          scopes.push(head);
+        } else if (head && head !== ":root" && head !== "*") {
+          const key = `${scopes.join(" » ")} » ${head}`;
+          seen.set(key, (seen.get(key) ?? 0) + 1);
+          scopes.push("");
+        } else {
+          scopes.push("");
+        }
+      } else if (ch === "}") {
+        scopes.pop();
+        buffer = "";
+      } else if (ch === ";") {
+        buffer = "";
+      } else {
+        buffer += ch;
+      }
+    }
+
+    const duplicated = [...seen].filter(([, n]) => n > 1).map(([s]) => s);
     expect(duplicated).toEqual([]);
   });
 

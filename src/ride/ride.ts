@@ -81,6 +81,8 @@ export interface RideState {
   finishZ: number;
   /** Real seconds the ride has run. */
   elapsed: number;
+  /** Whether the rider is tucked in this frame — the renderer draws it. */
+  squeezing: boolean;
   /** Game-minutes lost to crashes. */
   minutesLost: number;
   crashes: number;
@@ -293,6 +295,7 @@ export function createRide(opts: RideOptions): RideState {
     finishZ,
     elapsed: 0,
     minutesLost: 0,
+    squeezing: false,
     crashes: 0,
     stagger: 0,
     done: false,
@@ -373,6 +376,7 @@ export function stepRide(ride: RideState, input: RideInput, dt: number): void {
   // Squeezing: pull your elbows in and thread the gap. Narrower, but slower,
   // and there is nothing left in reserve if it turns out not to fit.
   const squeezing = input.squeeze === true;
+  ride.squeezing = squeezing;
   if (squeezing) ride.speed = Math.min(ride.speed, ride.rules.squeezeSpeedCap);
 
   // Steering. A loaded bag turns like a loaded bag.

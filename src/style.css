@@ -364,7 +364,10 @@ button:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 
 .ridestage { position: absolute; inset: 0; background: #0d1a24; }
 .ridewrap { position: absolute; inset: 0; overflow: hidden; }
-.ridecanvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.ridecanvas {
+  position: absolute; inset: 0; width: 100%; height: 100%; display: block;
+  transition: transform 0.12s ease-out;
+}
 
 .ridehud {
   position: absolute;
@@ -457,7 +460,27 @@ button:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 .rc.gas:active { background: #2af0af; }
 .rc.gas span { font-size: 17px; font-weight: 800; letter-spacing: 0.08em; }
 
-.ridehint { position: absolute; left: 0; right: 0; bottom: 168px; text-align: center; font-size: 11.5px; color: rgba(255, 255, 255, 0.45); pointer-events: none; }
+.ridehint {
+  position: absolute; left: 0; right: 0; bottom: 168px;
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 14px;
+  font-size: 11px; color: rgba(255, 255, 255, 0.4); pointer-events: none;
+}
+.ridehint b { color: rgba(255, 255, 255, 0.72); font-weight: 700; }
+
+/* Squeezing: the frame itself pinches in. Paired with the rider tucking and the
+   speed lines on the canvas, so the state is unmistakable while it is held. */
+.ridewrap.squeezing::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  box-shadow: inset 0 0 0 3px rgba(0, 227, 155, 0.5),
+              inset 0 0 90px rgba(0, 227, 155, 0.16);
+  animation: squeezepulse 0.5s ease-in-out infinite alternate;
+}
+.ridewrap.squeezing .ridecanvas { transform: scaleX(0.94); }
+@keyframes squeezepulse { to { opacity: 0.55; } }
+@media (prefers-reduced-motion: reduce) {
+  .ridewrap.squeezing::after { animation: none; }
+  .ridecanvas { transition: none; }
+}
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 
@@ -682,5 +705,11 @@ button:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 .rc.hit { color: #ffb9ab; border-color: rgba(255, 106, 82, 0.4); }
 .rc.hit:active { background: rgba(255, 106, 82, 0.3); }
 .hit-label { font-size: 12px; font-weight: 800; letter-spacing: 0.09em; }
+/* The key on the button itself. "What is the button for kick" is not a question
+   the player should have to leave the ride to answer. */
+.rc.small em {
+  display: block; margin-top: 2px; font-style: normal; font-size: 9px;
+  font-weight: 700; letter-spacing: 0.14em; opacity: 0.5;
+}
 
 .rc.brake:active { background: rgba(255, 255, 255, 0.2); }

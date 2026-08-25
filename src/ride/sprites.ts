@@ -185,3 +185,114 @@ export function drawPlayerBike(
 
   ctx.restore();
 }
+
+
+/**
+ * The swing, drawn as the thing that is actually swinging.
+ *
+ * A rotating straight line read as an axe, because a rotating straight line is
+ * an axe. Road Rash's kick worked because it was unmistakably a leg: a thigh,
+ * a knee, a boot, pivoting from the hip. So each of these is drawn as its own
+ * object rather than as one primitive rotated by a different amount.
+ *
+ * `progress` runs 0 to 1 across the swing.
+ */
+export function drawSwing(
+  ctx: CanvasRenderingContext2D,
+  weapon: "none" | "chain" | "bat",
+  cx: number,
+  cy: number,
+  scale: number,
+  side: -1 | 1,
+  progress: number,
+): void {
+  // Out fast, back slow — a strike is not a symmetrical motion.
+  const extend = progress < 0.35 ? progress / 0.35 : 1 - (progress - 0.35) / 0.65;
+  const reach = scale * extend;
+
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(side, 1);
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+
+  if (weapon === "none") {
+    // A leg: thigh out from the hip, shin dropping, boot on the end. The knee
+    // straightens as it extends, which is what sells it as a kick.
+    const knee = { x: reach * 0.55, y: -scale * 0.05 + (1 - extend) * scale * 0.18 };
+    const foot = { x: reach * 1.0, y: scale * 0.1 - extend * scale * 0.04 };
+
+    ctx.strokeStyle = "#3d4a44";
+    ctx.lineWidth = scale * 0.17;
+    ctx.beginPath();
+    ctx.moveTo(0, -scale * 0.1);
+    ctx.lineTo(knee.x, knee.y);
+    ctx.lineTo(foot.x, foot.y);
+    ctx.stroke();
+
+    ctx.fillStyle = "#141816";
+    ctx.beginPath();
+    ctx.ellipse(foot.x, foot.y, scale * 0.16, scale * 0.1, -0.2, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (weapon === "chain") {
+    // Links, drawn as a sagging arc rather than a rod. A chain has no spine.
+    const links = 9;
+    ctx.strokeStyle = "#aeb8b1";
+    ctx.lineWidth = scale * 0.075;
+    for (let i = 1; i <= links; i++) {
+      const f = i / links;
+      const x = reach * 1.15 * f;
+      const y = -scale * 0.12 + Math.sin(f * Math.PI) * scale * 0.3 * (1 - extend * 0.6);
+      ctx.beginPath();
+      ctx.ellipse(x, y, scale * 0.07, scale * 0.045, f * 0.9, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    // The arm holding it.
+    ctx.strokeStyle = "#3d4a44";
+    ctx.lineWidth = scale * 0.13;
+    ctx.beginPath();
+    ctx.moveTo(0, -scale * 0.2);
+    ctx.lineTo(reach * 0.3, -scale * 0.16);
+    ctx.stroke();
+  } else {
+    // A bat: a handle, a taper, and a fat end that is obviously the business end.
+    const tipX = reach * 1.05;
+    const tipY = -scale * 0.16;
+
+    ctx.strokeStyle = "#3d4a44";
+    ctx.lineWidth = scale * 0.13;
+    ctx.beginPath();
+    ctx.moveTo(0, -scale * 0.2);
+    ctx.lineTo(reach * 0.28, tipY);
+    ctx.stroke();
+
+    const grad = ctx.createLinearGradient(reach * 0.28, tipY, tipX, tipY);
+    grad.addColorStop(0, "#8c5a2f");
+    grad.addColorStop(1, "#c98f52");
+    ctx.strokeStyle = grad;
+    ctx.lineWidth = scale * 0.1;
+    ctx.beginPath();
+    ctx.moveTo(reach * 0.28, tipY);
+    ctx.lineTo(tipX * 0.72, tipY);
+    ctx.stroke();
+
+    ctx.lineWidth = scale * 0.2;
+    ctx.beginPath();
+    ctx.moveTo(tipX * 0.72, tipY);
+    ctx.lineTo(tipX, tipY);
+    ctx.stroke();
+  }
+
+  // A smear behind the arc, so a fast swing reads at sixty frames a second.
+  if (extend > 0.3) {
+    ctx.globalAlpha = 0.18 * extend;
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = scale * 0.06;
+    ctx.beginPath();
+    ctx.arc(0, -scale * 0.1, reach * 0.95, -0.75, 0.3);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  ctx.restore();
+}

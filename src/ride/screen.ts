@@ -11,7 +11,8 @@ import {
   type Point,
   type Segment,
 } from "./road.js";
-import { drawPlayerBike, drawVehicle } from "./sprites.js";
+import { createAudio } from "./audio.js";
+import { drawPlayerBike, drawSwing, drawVehicle } from "./sprites.js";
 import {
   argue,
   createRide,
@@ -91,7 +92,7 @@ export function runRide(
           <button class="rc small horn" data-horn="1" aria-label="Horn">HORN</button>
           <button class="rc small brake" data-brake="1" aria-label="Brake">BRAKE</button>
           <button class="rc small hit" data-hit="1" aria-label="Swing">
-            <span class="hit-label">KICK</span>
+            <span class="hit-label">KICK</span><em>F</em>
           </button>
         </div>
         <div class="rc-row">
@@ -100,7 +101,12 @@ export function runRide(
           <button class="rc right" data-steer="1" aria-label="Right"></button>
         </div>
       </div>
-      <div class="ridehint">Hold GO · both arrows to squeeze through a gap</div>
+      <div class="ridehint">
+        <span><b>GO</b> throttle</span>
+        <span><b>F</b> swing</span>
+        <span><b>H</b> horn</span>
+        <span><b>Shift</b> or both arrows — squeeze</span>
+      </div>
       <div class="police" hidden>
         <div class="pol-card">
           <b>Pulled over</b>
@@ -113,6 +119,7 @@ export function runRide(
       </div>
     </div>`;
 
+  const wrap = host.querySelector<HTMLElement>(".ridewrap")!;
   const canvas = host.querySelector<HTMLCanvasElement>(".ridecanvas")!;
   const meter = host.querySelector<HTMLElement>(".ridemeter i")!;
   const speedo = host.querySelector<HTMLElement>(".ridespeed b")!;
@@ -135,10 +142,15 @@ export function runRide(
   };
   const held = new Set<string>();
 
+  // Shift is its own way to squeeze, tracked separately: syncSteer used to
+  // assign input.squeeze outright, so it wiped the Shift key a line after the
+  // key handler set it and squeezing by keyboard never once took effect.
+  let shiftHeld = false;
+
   const syncSteer = (): void => {
     input.steer = (held.has("1") ? 1 : 0) - (held.has("-1") ? 1 : 0);
     // Holding both is not a contradiction, it is pulling your elbows in.
-    input.squeeze = held.has("1") && held.has("-1");
+    input.squeeze = shiftHeld || (held.has("1") && held.has("-1"));
   };
 
   // The roadside negotiation, which pauses everything until it is settled.
@@ -152,7 +164,12 @@ export function runRide(
   host.addEventListener("click", onSettle);
 
   const onDown = (event: PointerEvent): void => {
-    const el = (event.target as Element)?.closest<HTMLElement>("[data-steer],[data-gas]");
+    // Every button, not just the two. HORN, BRAKE and KICK were listed in the
+    // branches below but not in this selector, so pressing them did nothing at
+    // all — which is why the horn was silent even before there was any audio.
+    const el = (event.target as Element)?.closest<HTMLElement>(
+      "[data-steer],[data-gas],[data-horn],[data-brake],[data-hit]",
+    );
     if (!el) return;
     event.preventDefault();
     if (el.dataset["gas"]) input.throttle = true;
@@ -186,7 +203,7 @@ export function runRide(
     } else if (event.key === "f" || event.key === "Enter") {
       input.hit = down;
     } else if (event.key === "Shift") {
-      input.squeeze = down;
+      shiftHeld = down;
     } else return;
     event.preventDefault();
     syncSteer();
@@ -201,11 +218,18 @@ export function runRide(
   window.addEventListener("keydown", keyDown);
   window.addEventListener("keyup", keyUp);
 
+  const audio = createAudio();
+
   let raf = 0;
   let last = performance.now();
+  // Sound follows changes in the sim, so these track what was true last frame.
+  let heardCrashes = 0;
+  let heardLanded = 0;
+  let heardWeapon = ride.combat.weapon;
   let cancelled = false;
 
   const teardown = (): void => {
+    audio.stop();
     cancelAnimationFrame(raf);
     host.removeEventListener("pointerdown", onDown);
     host.removeEventListener("click", onSettle);
@@ -222,6 +246,19 @@ export function runRide(
       last = now;
 
       if (!cancelled) stepRide(ride, input, dt);
+
+      // Sound, driven off the sim rather than off the input: the horn is heard
+      // when the rider actually leans on it, and an impact is heard because one
+      // happened, not because a button was pressed.
+      audio.setSpeed(ride.speed);
+      audio.horn(input.horn && !ride.heldBy);
+      if (ride.crashes > heardCrashes) audio.crash();
+      if (ride.combat.landed > heardLanded) audio.hit();
+      if (ride.combat.weapon !== heardWeapon) audio.pickup();
+      heardCrashes = ride.crashes;
+      heardLanded = ride.combat.landed;
+      heardWeapon = ride.combat.weapon;
+
       // A strike is a tap, not a hold, so it is spent the frame it is read.
       input.hit = false;
       resize(canvas);
@@ -244,6 +281,10 @@ export function runRide(
       stats.className = `ridestats ${willBeLate ? "late" : ""}`;
 
       hitLabel.textContent = ride.combat.weapon === "none" ? "KICK" : ride.combat.weapon.toUpperCase();
+
+      // Squeezing changed nothing you could see, which made it feel broken even
+      // though it was working. Now the whole frame narrows while it is held.
+      wrap.classList.toggle("squeezing", input.squeeze && ride.speed > 0.05);
 
       if (ride.heldBy) {
         police.hidden = false;
@@ -510,34 +551,47 @@ function drawRider(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, rid
   const { width: w, height: h } = canvas;
   // Wobble when staggered from a hit, so a spill reads without a message.
   const lean = ride.stagger > 0 ? Math.sin(ride.elapsed * 42) * 0.18 : 0;
-  drawPlayerBike(ctx, w / 2, h * 0.9, w * 0.15, lean, ride.stagger > 0);
 
-  // The swing, drawn as an arc out to whichever side it went.
+  // Tucked in while squeezing: the rider physically narrows, which is the cue
+  // that says the gap just got passable. Nothing on screen said so before.
+  const tuck = ride.squeezing ? 0.72 : 1;
+  if (ride.squeezing) drawSqueezeLines(ctx, w, h, ride.elapsed);
+  drawPlayerBike(ctx, w / 2, h * 0.9, w * 0.15 * tuck, lean, ride.stagger > 0);
+
+  // The swing, drawn as whatever is actually swinging.
   const c = ride.combat;
   if (c.swing <= 0) return;
+  drawSwing(ctx, c.weapon, w / 2, h * 0.84, w * 0.16, c.swingSide, 1 - c.swing / 0.28);
+}
 
-  const reach = w * (c.weapon === "chain" ? 0.3 : c.weapon === "bat" ? 0.24 : 0.17);
-  const progress = 1 - c.swing / 0.28;
-  const angle = (-0.5 + progress * 1.1) * c.swingSide;
-  const cx = w / 2;
-  const cy = h * 0.83;
-
+/**
+ * Speed lines converging on the vanishing point.
+ *
+ * Squeezing costs top speed, so without a cue it reads as the bike bogging down
+ * for no reason. Lines rushing past sell it as deliberate rather than broken.
+ */
+function drawSqueezeLines(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  elapsed: number,
+): void {
   ctx.save();
-  ctx.translate(cx, cy);
-  ctx.rotate(angle);
-  ctx.strokeStyle = c.weapon === "none" ? "#e8ebe3" : c.weapon === "chain" ? "#b9c2bb" : "#a9713f";
-  ctx.lineWidth = c.weapon === "bat" ? w * 0.022 : w * 0.014;
-  ctx.lineCap = "round";
-  ctx.beginPath();
-  ctx.moveTo(0, 0);
-  ctx.lineTo(reach * c.swingSide, -reach * 0.25);
-  ctx.stroke();
-
-  // A smear behind the swing so a fast arc reads at 60fps.
-  ctx.globalAlpha = 0.28;
-  ctx.beginPath();
-  ctx.arc(0, 0, reach, angle - 0.5 * c.swingSide, angle, c.swingSide < 0);
-  ctx.stroke();
+  ctx.strokeStyle = "rgba(255,255,255,0.5)";
+  ctx.lineWidth = Math.max(1, w * 0.003);
+  for (let i = 0; i < 14; i++) {
+    // Each line runs its own loop, offset so they do not pulse in unison.
+    const phase = ((elapsed * 2.4 + i * 0.137) % 1) ** 2;
+    const side = i % 2 === 0 ? -1 : 1;
+    const spread = 0.06 + (i / 14) * 0.44;
+    const x = w / 2 + side * spread * w * (0.25 + phase * 3);
+    const y = h * (0.5 + phase * 0.48);
+    ctx.globalAlpha = 0.55 * (1 - phase);
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + side * w * 0.06 * phase, y + h * 0.05 * phase);
+    ctx.stroke();
+  }
   ctx.restore();
 }
 
