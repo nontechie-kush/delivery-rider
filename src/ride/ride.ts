@@ -83,6 +83,12 @@ export interface RideState {
   elapsed: number;
   /** Whether the rider is tucked in this frame — the renderer draws it. */
   squeezing: boolean;
+  /** Tired hands at the end of a shift: below 1 steers slower. */
+  steerScale: number;
+  /** Above 1 means the brakes take longer to haul the speed off. */
+  brakeScale: number;
+  /** Draw it as dusk. */
+  night: boolean;
   /** Game-minutes lost to crashes. */
   minutesLost: number;
   crashes: number;
@@ -159,7 +165,6 @@ export interface RideOptions {
   /** Real seconds the ride should take at a good pace. */
   seconds: number;
   /** 0 to 1. Rush hour puts more between you and the drop. */
-  density: number;
   /** 0 to 1. A full bag is slower to move and worse to stop. */
   load: number;
   seed: number;
@@ -179,6 +184,26 @@ export interface RideOptions {
   counterStagger: number;
   squeezeWidth: number;
   squeezeSpeedCap: number;
+
+  /** How hard the road should push, 0 calm to 1 the worst of the rush. */
+  pressure: number;
+  traffic: {
+    breatherSecondsCalm: number;
+    breatherSecondsPeak: number;
+    rowGapSeconds: number;
+    reactionFloorSeconds: number;
+    rowsCalm: number;
+    rowsPeak: number;
+    laneJitter: number;
+    minCentreGap: number;
+  };
+  /** End-of-shift modifiers. All 1 during the body of the day. */
+  trafficCountScale: number;
+  trafficSpeedScale: number;
+  steerScale: number;
+  brakeScale: number;
+  /** Dusk, drawn darker. Cosmetic only. */
+  night: boolean;
 }
 
 const TOP_SPEED = 5200; // world units per second
@@ -199,29 +224,162 @@ function mulberry(seed: number): () => number {
   };
 }
 
+/** Lane centres across a road that runs from -1 to 1. */
+const LANE_X = [-2 / 3, 0, 2 / 3];
+
+/** Half the x a hazard denies the rider's centre. Mirrors checkCollisions. */
+function blockedHalfWidth(h: Pick<Hazard, "width">): number {
+  return h.width + 0.1;
+}
+
+/**
+ * Whether a row of traffic leaves a line through it.
+ *
+ * Shared by the generator and by the test that guards it, so there is exactly
+ * one definition of "passable" in the codebase. The rider's own width is
+ * already inside blockedHalfWidth, so what this measures is the freedom left to
+ * the rider's centre — and it insists on a real margin, because a gap that only
+ * exists in the arithmetic is not one anybody can ride through.
+ */
+export function rowIsThreadable(row: readonly Hazard[], minCentreGap: number): boolean {
+  if (row.length === 0) return true;
+
+  const spans = row
+    .map((h) => [h.x - blockedHalfWidth(h), h.x + blockedHalfWidth(h)] as const)
+    .sort((a, b) => a[0] - b[0]);
+
+  let cursor = -1;
+  let widest = 0;
+  for (const [from, to] of spans) {
+    widest = Math.max(widest, from - cursor);
+    cursor = Math.max(cursor, to);
+  }
+  widest = Math.max(widest, 1 - cursor);
+
+  return widest >= minCentreGap;
+}
+
+const KIND_WIDTH: Record<Hazard["kind"], number> = {
+  car: 0.24,
+  auto: 0.24,
+  truck: 0.34,
+  bike: 0.13,
+  pothole: 0.12,
+};
+const KIND_SPEED: Record<Hazard["kind"], number> = {
+  car: 0.42,
+  auto: 0.42,
+  truck: 0.32,
+  bike: 0.55,
+  pothole: 0,
+};
+
+/** The closing speed a full-throttle rider makes on ordinary traffic. */
+const REFERENCE_CLOSING = TOP_SPEED * 0.58;
+
+/**
+ * Lays out traffic as packs of rows with clear road between them.
+ *
+ * The old generator drew z and x uniformly at random, which produced 6.3
+ * encounters a second at peak with a median of 0.10s to react to each — below
+ * human reaction time, so the road was unplayable by construction rather than
+ * by bad luck. A flat distribution also cannot produce a lull, and the lulls
+ * are what let a player read the next pack.
+ *
+ * So: a pack is one to three rows, each row occupying at most two of the three
+ * lanes, which is what guarantees a line through it. Rows within a pack sit
+ * close enough to be taken as one movement; packs are separated by road that is
+ * deliberately empty. Pressure tightens the breathers and adds rows, never
+ * below the reaction floor.
+ */
+function buildTraffic(opts: RideOptions, finishZ: number, rand: () => number): Hazard[] {
+  const t = opts.traffic;
+  const pressure = Math.max(0, Math.min(1, opts.pressure));
+  const lerp = (a: number, b: number): number => a + (b - a) * pressure;
+
+  const breather =
+    Math.max(t.reactionFloorSeconds, lerp(t.breatherSecondsCalm, t.breatherSecondsPeak)) /
+    Math.max(0.2, opts.trafficCountScale);
+  const rowGap = Math.max(t.reactionFloorSeconds, t.rowGapSeconds);
+  const rows = lerp(t.rowsCalm, t.rowsPeak);
+
+  const hazards: Hazard[] = [];
+  // The first stretch is always clear: nobody should be met by a pack before
+  // they have the bike moving.
+  let z = 3400;
+
+  while (z < finishZ - 3000) {
+    // Fractional row counts resolve probabilistically, so a pressure of 1.6
+    // rows means "sometimes one, usually two" rather than a hard step.
+    const rowCount = Math.max(1, Math.floor(rows) + (rand() < rows % 1 ? 1 : 0));
+
+    for (let r = 0; r < rowCount && z < finishZ - 3000; r++) {
+      const row = buildRow(rand, z, opts, t.laneJitter, t.minCentreGap);
+      hazards.push(...row);
+      // Clear road is measured from the back of the row, so the gap the player
+      // gets is the gap the config promised rather than that minus the stagger.
+      z = Math.max(...row.map((h) => h.z)) + rowGap * REFERENCE_CLOSING;
+    }
+
+    z += breather * REFERENCE_CLOSING;
+  }
+
+  return hazards;
+}
+
+/**
+ * One row: at most two of three lanes, so a lane is always open.
+ *
+ * The result is verified rather than assumed — jitter could in principle close
+ * a gap the lane arithmetic promised, so a row that fails the check is placed
+ * again without jitter, which always passes.
+ */
+function buildRow(
+  rand: () => number,
+  z: number,
+  opts: RideOptions,
+  jitter: number,
+  minCentreGap: number,
+): Hazard[] {
+  // Which lane stays open. Everything else may be used.
+  const openLane = Math.floor(rand() * LANE_X.length);
+  const usable = LANE_X.filter((_, i) => i !== openLane);
+
+  // One vehicle most of the time, two when the road is meant to bite.
+  const take = rand() < 0.45 ? usable.length : 1;
+  const lanes = usable.slice().sort(() => rand() - 0.5).slice(0, take);
+
+  const build = (spread: number): Hazard[] =>
+    lanes.map((lane, i) => {
+      const roll = rand();
+      const kind: Hazard["kind"] =
+        roll < 0.34 ? "car" : roll < 0.55 ? "auto" : roll < 0.68 ? "truck" : roll < 0.88 ? "bike" : "pothole";
+      return {
+        // A row is not a perfectly straight line of cars; stagger it slightly
+        // in z as well so it reads as traffic rather than as a fence. Forward
+        // only: staggering backwards would eat the breather behind the row and
+        // pull the reaction floor below what it promises.
+        z: z + rand() * 380 + i * 60,
+        x: lane + (rand() - 0.5) * spread,
+        speed: KIND_SPEED[kind] * opts.trafficSpeedScale,
+        kind,
+        width: KIND_WIDTH[kind],
+      };
+    });
+
+  const row = build(jitter * 2);
+  return rowIsThreadable(row, minCentreGap) ? row : build(0);
+}
+
 export function createRide(opts: RideOptions): RideState {
   const rand = mulberry(opts.seed);
   const finishZ = TOP_SPEED * opts.seconds * 0.82;
   const segmentCount = Math.ceil(finishZ / SEGMENT_LENGTH) + 120;
   const road = buildRoad(segmentCount, rand);
 
-  // Traffic thins toward the start so the first second is never a wall.
-  const hazards: Hazard[] = [];
-  const count = Math.floor((finishZ / SEGMENT_LENGTH) * (0.12 + opts.density * 0.3));
-  for (let i = 0; i < count; i++) {
-    const z = 2600 + rand() * (finishZ - 3200);
-    const roll = rand();
-    const kind: Hazard["kind"] =
-      roll < 0.34 ? "car" : roll < 0.55 ? "auto" : roll < 0.68 ? "truck" : roll < 0.88 ? "bike" : "pothole";
-
-    hazards.push({
-      z,
-      x: (rand() - 0.5) * 1.55,
-      speed: kind === "pothole" ? 0 : kind === "truck" ? 0.32 : kind === "bike" ? 0.55 : 0.42,
-      kind,
-      width: kind === "truck" ? 0.34 : kind === "pothole" ? 0.12 : kind === "bike" ? 0.13 : 0.24,
-    });
-  }
+  // Traffic as packs of vehicles separated by clear road, rather than a uniform
+  // scatter. See buildTraffic for why the scatter had to go.
+  const hazards = buildTraffic(opts, finishZ, rand);
 
   // Roughly one junction every few hundred metres, as a Gurgaon arterial has.
   const signals: Signal[] = [];
@@ -296,6 +454,9 @@ export function createRide(opts: RideOptions): RideState {
     elapsed: 0,
     minutesLost: 0,
     squeezing: false,
+    steerScale: opts.steerScale,
+    brakeScale: opts.brakeScale,
+    night: opts.night,
     crashes: 0,
     stagger: 0,
     done: false,
@@ -380,7 +541,7 @@ export function stepRide(ride: RideState, input: RideInput, dt: number): void {
   if (squeezing) ride.speed = Math.min(ride.speed, ride.rules.squeezeSpeedCap);
 
   // Steering. A loaded bag turns like a loaded bag.
-  const agility = 1.55 * (1 - ride.load * 0.35) * (squeezing ? 1.25 : 1);
+  const agility = 1.55 * (1 - ride.load * 0.35) * (squeezing ? 1.25 : 1) * ride.steerScale;
   ride.x += input.steer * agility * dt;
 
   if (input.horn === true) soundHorn(ride, dt);

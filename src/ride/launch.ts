@@ -50,13 +50,25 @@ export async function launchRide(
   );
 
   // Rush hour puts more between you and the drop, and a full bag handles worse.
-  const density = Math.min(1, Math.max(0, (trafficAt(state.clock, cfg) - 0.8) / 0.6));
+  const pressure = Math.min(1, Math.max(0, (trafficAt(state.clock, cfg) - 0.8) / 0.6));
+
+  // The last few deliveries of a shift: emptier roads, faster traffic, and a
+  // rider whose hands have been on the bars for ten hours.
+  const minutesLeft = cfg.dayMinutes - state.clock;
+  const tired = minutesLeft <= cfg.endgame.orders * cfg.endgame.orderMinutes;
+  const e = cfg.endgame;
 
   const { promise } = runRide(
     stage,
     {
       seconds,
-      density,
+      pressure,
+      traffic: cfg.traffic,
+      trafficCountScale: tired ? e.trafficCountScale : 1,
+      trafficSpeedScale: tired ? e.trafficSpeedScale : 1,
+      steerScale: tired ? e.steerScale : 1,
+      brakeScale: tired ? e.brakeScale : 1,
+      night: tired,
       load: state.carried.length / state.bag.length,
       seed: Math.floor(Math.random() * 1e9),
       signalWaitSeconds: cfg.signalWaitSeconds,

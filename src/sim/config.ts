@@ -232,6 +232,62 @@ export interface GameConfig {
   squeezeWidth: number;
   squeezeSpeedCap: number;
 
+  /* ------------------------------------------------------ traffic rhythm */
+  /**
+   * Traffic is placed as packs separated by deliberately clear road, not by a
+   * uniform random draw. A flat distribution has no troughs in it, and the
+   * troughs are what make the peaks readable — scattering vehicles evenly is
+   * what made the road feel like hail rather than like traffic.
+   *
+   * Every distance here is quoted in *seconds of closing time* at full
+   * throttle, because that is the thing the player actually experiences. The
+   * generator converts to world units using the reference closing speed.
+   */
+  traffic: {
+    /** Clear road between packs on an empty afternoon. */
+    breatherSecondsCalm: number;
+    /** Clear road between packs at the worst of the lunch rush. */
+    breatherSecondsPeak: number;
+    /**
+     * Gap between rows inside one pack — the slalom. Deliberately below the
+     * breather: a pack is meant to be taken as one move, not three.
+     */
+    rowGapSeconds: number;
+    /**
+     * The floor nothing may go below, whatever the pressure. Simple human
+     * reaction is around 250ms; this leaves time to see the gap and act on it,
+     * so full throttle stays possible at peak but stops being comfortable.
+     */
+    reactionFloorSeconds: number;
+    /** Rows per pack, interpolated across pressure. */
+    rowsCalm: number;
+    rowsPeak: number;
+    /** How far a vehicle may sit off its lane centre, in x units. */
+    laneJitter: number;
+    /**
+     * Clear x the rider's centre needs through a row. Above zero because a gap
+     * that exists only in the arithmetic is not a gap the player can use.
+     */
+    minCentreGap: number;
+  };
+
+  /**
+   * The end of a shift, when the rider is tired and the roads have emptied.
+   *
+   * Thinner traffic moving faster, and a rider who steers slower and brakes
+   * longer: more time to see what is coming, less ability to do anything about
+   * it. The window is expressed as deliveries because that is how the day is
+   * counted, and converted to minutes at the typical order length.
+   */
+  endgame: {
+    orders: number;
+    orderMinutes: number;
+    trafficCountScale: number;
+    trafficSpeedScale: number;
+    steerScale: number;
+    brakeScale: number;
+  };
+
   /** What it takes to be waved on, and what arguing costs instead. */
   bribeMin: number;
   bribeMax: number;
@@ -409,6 +465,26 @@ export const DEFAULT_CONFIG: GameConfig = {
   counterStagger: 0.85,
   squeezeWidth: 0.55,
   squeezeSpeedCap: 0.62,
+
+  traffic: {
+    breatherSecondsCalm: 1.5,
+    breatherSecondsPeak: 0.62,
+    rowGapSeconds: 0.45,
+    reactionFloorSeconds: 0.42,
+    rowsCalm: 1,
+    rowsPeak: 2.6,
+    laneJitter: 0.07,
+    minCentreGap: 0.26,
+  },
+
+  endgame: {
+    orders: 3,
+    orderMinutes: 30,
+    trafficCountScale: 0.6,
+    trafficSpeedScale: 1.4,
+    steerScale: 0.8,
+    brakeScale: 1.3,
+  },
 
   bribeMin: 100,
   bribeMax: 300,

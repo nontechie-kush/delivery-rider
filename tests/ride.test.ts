@@ -5,6 +5,7 @@ import {
   createRide,
   payBribe,
   rideResult,
+  rowIsThreadable,
   signalIsRed,
   stepRide,
   type RideInput,
@@ -35,9 +36,15 @@ const FLAT_OUT: RideInput = { steer: 0, throttle: true, brake: false };
 function makeRide(over: Partial<Parameters<typeof createRide>[0]> = {}) {
   return createRide({
     seconds: 10,
-    density: 0,
+    pressure: 0,
     load: 0,
     seed: 1,
+    traffic: C.traffic,
+    trafficCountScale: 1,
+    trafficSpeedScale: 1,
+    steerScale: 1,
+    brakeScale: 1,
+    night: false,
     signalWaitSeconds: C.signalWaitSeconds,
     signalRunCrashChance: C.signalRunCrashChance,
     signalRunStopChance: C.signalRunStopChance,
@@ -145,8 +152,8 @@ describe("the road", () => {
 
 describe("riding", () => {
   it("finishes, and faster on the throttle than coasting", () => {
-    const fast = makeRide({ seconds: 10, density: 0, load: 0, seed: 7 });
-    const slow = makeRide({ seconds: 10, density: 0, load: 0, seed: 7 });
+    const fast = makeRide({ seconds: 10, pressure: 0, load: 0, seed: 7 });
+    const slow = makeRide({ seconds: 10, pressure: 0, load: 0, seed: 7 });
     const fastTime = playOut(fast, FLAT_OUT);
     const slowTime = playOut(slow, COAST);
 
@@ -156,22 +163,22 @@ describe("riding", () => {
   });
 
   it("takes roughly the seconds it was asked for at a good pace", () => {
-    const ride = makeRide({ seconds: 12, density: 0, load: 0, seed: 3 });
+    const ride = makeRide({ seconds: 12, pressure: 0, load: 0, seed: 3 });
     const took = playOut(ride, FLAT_OUT);
     expect(took).toBeGreaterThan(6);
     expect(took).toBeLessThan(20);
   });
 
   it("is deterministic for a seed", () => {
-    const a = makeRide({ seconds: 8, density: 0.6, load: 0.4, seed: 11 });
-    const b = makeRide({ seconds: 8, density: 0.6, load: 0.4, seed: 11 });
+    const a = makeRide({ seconds: 8, pressure: 0.6, load: 0.4, seed: 11 });
+    const b = makeRide({ seconds: 8, pressure: 0.6, load: 0.4, seed: 11 });
     playOut(a, FLAT_OUT);
     playOut(b, FLAT_OUT);
     expect(rideResult(a)).toEqual(rideResult(b));
   });
 
   it("keeps the rider on or near the tarmac", () => {
-    const ride = makeRide({ seconds: 10, density: 0, load: 0, seed: 5 });
+    const ride = makeRide({ seconds: 10, pressure: 0, load: 0, seed: 5 });
     for (let i = 0; i < 600; i++) stepRide(ride, { steer: 1, throttle: true, brake: false }, 1 / 60);
     expect(Math.abs(ride.x)).toBeLessThanOrEqual(1.5);
   });
@@ -182,8 +189,8 @@ describe("riding", () => {
    * costs more when it goes wrong.
    */
   it("makes a heavy bag cost more per crash", () => {
-    const light = makeRide({ seconds: 20, density: 1, load: 0, seed: 21 });
-    const heavy = makeRide({ seconds: 20, density: 1, load: 1, seed: 21 });
+    const light = makeRide({ seconds: 20, pressure: 1, load: 0, seed: 21 });
+    const heavy = makeRide({ seconds: 20, pressure: 1, load: 1, seed: 21 });
     playOut(light, FLAT_OUT);
     playOut(heavy, FLAT_OUT);
 
@@ -192,9 +199,9 @@ describe("riding", () => {
     }
   });
 
-  it("puts more in the way at higher density", () => {
-    const quiet = makeRide({ seconds: 20, density: 0, load: 0, seed: 9 });
-    const rush = makeRide({ seconds: 20, density: 1, load: 0, seed: 9 });
+  it("puts more in the way at higher pressure", () => {
+    const quiet = makeRide({ seconds: 20, pressure: 0, load: 0, seed: 9 });
+    const rush = makeRide({ seconds: 20, pressure: 1, load: 0, seed: 9 });
     expect(rush.hazards.length).toBeGreaterThan(quiet.hazards.length);
   });
 
@@ -204,7 +211,7 @@ describe("riding", () => {
    * move together, and that a crash always costs something.
    */
   it("charges time for crashes and nothing without them", () => {
-    const ride = makeRide({ seconds: 12, density: 1, load: 0, seed: 4 });
+    const ride = makeRide({ seconds: 12, pressure: 1, load: 0, seed: 4 });
     playOut(ride, FLAT_OUT);
     const result = rideResult(ride);
 
@@ -216,8 +223,8 @@ describe("riding", () => {
     let reckless = 0;
     let careful = 0;
     for (let seed = 1; seed <= 12; seed++) {
-      const a = makeRide({ seconds: 14, density: 1, load: 0.5, seed });
-      const b = makeRide({ seconds: 14, density: 1, load: 0.5, seed });
+      const a = makeRide({ seconds: 14, pressure: 1, load: 0.5, seed });
+      const b = makeRide({ seconds: 14, pressure: 1, load: 0.5, seed });
       playOut(a, FLAT_OUT);
       playOut(b, { steer: 0, throttle: false, brake: true });
       reckless += a.crashes;
@@ -227,7 +234,7 @@ describe("riding", () => {
   });
 
   it("survives a frame hitch without teleporting the rider", () => {
-    const ride = makeRide({ seconds: 10, density: 0, load: 0, seed: 2 });
+    const ride = makeRide({ seconds: 10, pressure: 0, load: 0, seed: 2 });
     // A backgrounded tab hands back an enormous dt; the caller clamps it, and
     // a single clamped step must not cross the whole course.
     stepRide(ride, FLAT_OUT, 0.05);
@@ -408,7 +415,7 @@ describe("traffic obeys the lights", () => {
    * sailed through. Unfair to play against and wrong to look at.
    */
   it("holds moving traffic behind a red", () => {
-    const ride = makeRide({ seconds: 40, density: 1, seed: 31 });
+    const ride = makeRide({ seconds: 40, pressure: 1, seed: 31 });
     // A signal far enough ahead that traffic has room to reach it.
     const light = ride.signals[0];
     if (!light) return;
@@ -431,7 +438,7 @@ describe("traffic obeys the lights", () => {
   });
 
   it("stacks a queue rather than piling vehicles on one spot", () => {
-    const ride = makeRide({ seconds: 40, density: 1, seed: 17 });
+    const ride = makeRide({ seconds: 40, pressure: 1, seed: 17 });
     for (let i = 0; i < 900; i++) stepRide(ride, COAST, 1 / 60);
 
     for (const light of ride.signals) {
@@ -449,7 +456,7 @@ describe("traffic obeys the lights", () => {
   });
 
   it("lets traffic move again once the light clears", () => {
-    const ride = makeRide({ seconds: 40, density: 1, seed: 23 });
+    const ride = makeRide({ seconds: 40, pressure: 1, seed: 23 });
     const moving = () => ride.hazards.filter((h) => h.speed > 0).map((h) => h.z);
 
     const before = moving();
@@ -685,5 +692,119 @@ describe("the horn and the squeeze", () => {
 
     expect(pk.taken).toBe(true);
     expect(r.combat.weapon).toBe(pk.kind);
+  });
+});
+
+
+/**
+ * Traffic rhythm.
+ *
+ * The old generator drew z and x uniformly, which measured out at 6.3
+ * encounters a second at peak with 0.10s between them — below human reaction
+ * time, so the road could not be ridden for more than a couple of seconds by
+ * anybody. These are the two properties that must hold instead: a line always
+ * exists through a row, and there is always time to see it.
+ */
+describe("traffic rhythm", () => {
+  const TOP_SPEED = 5200;
+  /** Rows are vehicles within this much z of each other. */
+  const ROW_SPAN = 700;
+
+  const rowsOf = (hazards: readonly { z: number }[]): number[][] => {
+    const sorted = [...hazards].sort((a, b) => a.z - b.z);
+    const rows: number[][] = [];
+    for (let i = 0; i < sorted.length; ) {
+      let j = i + 1;
+      while (j < sorted.length && sorted[j]!.z - sorted[i]!.z < ROW_SPAN) j++;
+      rows.push(sorted.slice(i, j).map((_, k) => i + k));
+      i = j;
+    }
+    return rows;
+  };
+
+  it("always leaves a line through every row, at every pressure", () => {
+    for (const pressure of [0, 0.25, 0.5, 0.75, 1]) {
+      for (let seed = 0; seed < 60; seed++) {
+        const ride = makeRide({ seconds: 20, pressure, load: 0.5, seed });
+        const sorted = [...ride.hazards].sort((a, b) => a.z - b.z);
+        for (const idx of rowsOf(ride.hazards)) {
+          const row = idx.map((i) => sorted[i]!);
+          expect(rowIsThreadable(row, C.traffic.minCentreGap)).toBe(true);
+        }
+      }
+    }
+  });
+
+  it("never puts two rows closer than the reaction floor", () => {
+    // Measured at full throttle against ordinary traffic, which is the worst
+    // case: any slower and the rider has longer.
+    const closing = TOP_SPEED * 0.58;
+    let tightest = Infinity;
+
+    for (const pressure of [0, 0.5, 1]) {
+      for (let seed = 0; seed < 60; seed++) {
+        const ride = makeRide({ seconds: 20, pressure, load: 0.5, seed });
+        const sorted = [...ride.hazards].sort((a, b) => a.z - b.z);
+        const backs = rowsOf(ride.hazards).map((idx) => sorted[idx[idx.length - 1]!]!.z);
+        for (let i = 1; i < backs.length; i++) {
+          tightest = Math.min(tightest, (backs[i]! - backs[i - 1]!) / closing);
+        }
+      }
+    }
+
+    expect(tightest).toBeGreaterThanOrEqual(C.traffic.reactionFloorSeconds);
+  });
+
+  it("rewards easing off the throttle with time to react", () => {
+    // The whole point of peak pressure: flat out is possible but unforgiving,
+    // and backing off buys a materially bigger window rather than a token one.
+    const gapsAt = (riderSpeed: number): number => {
+      const closing = TOP_SPEED * (riderSpeed - 0.42);
+      const all: number[] = [];
+      for (let seed = 0; seed < 40; seed++) {
+        const ride = makeRide({ seconds: 20, pressure: 1, load: 0.5, seed });
+        const sorted = [...ride.hazards].sort((a, b) => a.z - b.z);
+        const backs = rowsOf(ride.hazards).map((idx) => sorted[idx[idx.length - 1]!]!.z);
+        for (let i = 1; i < backs.length; i++) all.push((backs[i]! - backs[i - 1]!) / closing);
+      }
+      all.sort((a, b) => a - b);
+      return all[Math.floor(all.length / 2)]!;
+    };
+
+    expect(gapsAt(0.7)).toBeGreaterThan(gapsAt(1) * 1.8);
+  });
+
+  it("leaves the road quiet when there is no pressure on it", () => {
+    const calm = makeRide({ seconds: 20, pressure: 0, load: 0, seed: 3 });
+    const peak = makeRide({ seconds: 20, pressure: 1, load: 0, seed: 3 });
+    expect(calm.hazards.length).toBeLessThan(peak.hazards.length);
+    // And nothing at all in the opening stretch, whatever the hour.
+    expect(Math.min(...peak.hazards.map((h) => h.z))).toBeGreaterThan(3000);
+  });
+});
+
+describe("the end of a shift", () => {
+  const tired = { trafficCountScale: 0.6, trafficSpeedScale: 1.4, steerScale: 0.8, brakeScale: 1.3, night: true };
+
+  it("thins the traffic and speeds it up", () => {
+    const day = makeRide({ seconds: 20, pressure: 0.5, seed: 8 });
+    const night = makeRide({ seconds: 20, pressure: 0.5, seed: 8, ...tired });
+
+    expect(night.hazards.length).toBeLessThan(day.hazards.length);
+    const avg = (r: typeof day): number =>
+      r.hazards.filter((h) => h.kind !== "pothole").reduce((s, h) => s + h.speed, 0) /
+      r.hazards.filter((h) => h.kind !== "pothole").length;
+    expect(avg(night)).toBeGreaterThan(avg(day));
+  });
+
+  it("makes the rider slower to steer, not the road harder", () => {
+    const fresh = makeRide({ seconds: 20, pressure: 0, seed: 8 });
+    const spent = makeRide({ seconds: 20, pressure: 0, seed: 8, ...tired });
+
+    const drift = (r: typeof fresh): number => {
+      for (let i = 0; i < 30; i++) stepRide(r, { steer: 1, throttle: true, brake: false }, 1 / 60);
+      return r.x;
+    };
+    expect(drift(spent)).toBeLessThan(drift(fresh));
   });
 });

@@ -36,14 +36,46 @@ import {
  * two-wheeler in an Indian city.
  */
 
-const SKY = "#0d1a24";
-const GROUND_A = "#1b2a1e";
-const GROUND_B = "#182619";
-const ROAD_A = "#33383a";
-const ROAD_B = "#2e3335";
-const RUMBLE_A = "#c9d1cc";
-const RUMBLE_B = "#7c847f";
-const LANE = "#cfd6d1";
+/**
+ * Dusk, for the last few deliveries of a shift.
+ *
+ * Everything sits closer together in value than it does by day, which is the
+ * point: the road is emptier and faster, and it is harder to read.
+ */
+const NIGHT = {
+  sky: "#070d14",
+  groundA: "#0f1712",
+  groundB: "#0d140f",
+  roadA: "#212527",
+  roadB: "#1d2123",
+  rumbleA: "#6e766f",
+  rumbleB: "#454b47",
+  lane: "#7d857f",
+};
+
+interface Palette {
+  sky: string;
+  groundA: string;
+  groundB: string;
+  roadA: string;
+  roadB: string;
+  rumbleA: string;
+  rumbleB: string;
+  lane: string;
+}
+
+const DAY: Palette = {
+  sky: "#0d1a24",
+  groundA: "#1b2a1e",
+  groundB: "#182619",
+  roadA: "#33383a",
+  roadB: "#2e3335",
+  rumbleA: "#c9d1cc",
+  rumbleB: "#7c847f",
+  lane: "#cfd6d1",
+};
+
+const paletteFor = (ride: RideState): Palette => (ride.night ? NIGHT : DAY);
 
 export interface RideHandle {
   cancel: () => void;
@@ -365,9 +397,10 @@ function polygon(
  * segments painting over near ones, and it is why this runs at all on a phone.
  */
 function draw(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, ride: RideState): void {
+  const pal = paletteFor(ride);
   const { width: w, height: h } = canvas;
 
-  ctx.fillStyle = SKY;
+  ctx.fillStyle = pal.sky;
   ctx.fillRect(0, 0, w, h);
 
   const base = segmentAt(ride.road, ride.z);
@@ -397,7 +430,7 @@ function draw(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, ride: Ri
 
     if (seg.p1.camera.z <= CAMERA_DEPTH || seg.p2.screen.y >= maxy) continue;
 
-    drawSegment(ctx, w, seg);
+    drawSegment(ctx, w, seg, pal);
     maxy = seg.p2.screen.y;
   }
 
@@ -407,21 +440,26 @@ function draw(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, ride: Ri
   drawRider(ctx, canvas, ride);
 }
 
-function drawSegment(ctx: CanvasRenderingContext2D, width: number, seg: Segment): void {
+function drawSegment(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  seg: Segment,
+  pal: Palette,
+): void {
   const p1 = seg.p1.screen;
   const p2 = seg.p2.screen;
 
   // Verge either side of the tarmac.
-  ctx.fillStyle = seg.dark ? GROUND_A : GROUND_B;
+  ctx.fillStyle = seg.dark ? pal.groundA : pal.groundB;
   ctx.fillRect(0, p2.y, width, p1.y - p2.y);
 
   const r1 = (p1.w / Math.max(6, 2 * LANES)) * 1.4;
   const r2 = (p2.w / Math.max(6, 2 * LANES)) * 1.4;
-  const rumble = seg.dark ? RUMBLE_A : RUMBLE_B;
+  const rumble = seg.dark ? pal.rumbleA : pal.rumbleB;
 
   polygon(ctx, p1.x - p1.w - r1, p1.y, p1.x - p1.w, p1.y, p2.x - p2.w, p2.y, p2.x - p2.w - r2, p2.y, rumble);
   polygon(ctx, p1.x + p1.w + r1, p1.y, p1.x + p1.w, p1.y, p2.x + p2.w, p2.y, p2.x + p2.w + r2, p2.y, rumble);
-  polygon(ctx, p1.x - p1.w, p1.y, p1.x + p1.w, p1.y, p2.x + p2.w, p2.y, p2.x - p2.w, p2.y, seg.dark ? ROAD_A : ROAD_B);
+  polygon(ctx, p1.x - p1.w, p1.y, p1.x + p1.w, p1.y, p2.x + p2.w, p2.y, p2.x - p2.w, p2.y, seg.dark ? pal.roadA : pal.roadB);
 
   // Lane markings only on the light bands, so they dash as the road moves.
   if (!seg.dark) return;
@@ -433,7 +471,7 @@ function drawSegment(ctx: CanvasRenderingContext2D, width: number, seg: Segment)
   let lx2 = p2.x - p2.w + lane2;
 
   for (let lane = 1; lane < LANES; lane++) {
-    polygon(ctx, lx1 - l1, p1.y, lx1 + l1, p1.y, lx2 + l2, p2.y, lx2 - l2, p2.y, LANE);
+    polygon(ctx, lx1 - l1, p1.y, lx1 + l1, p1.y, lx2 + l2, p2.y, lx2 - l2, p2.y, pal.lane);
     lx1 += lane1;
     lx2 += lane2;
   }
