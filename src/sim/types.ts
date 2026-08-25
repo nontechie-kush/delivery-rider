@@ -39,10 +39,16 @@ export interface Order {
   distance: number;
   /** Base + distance pay in rupees. Milestones are separate. */
   fee: number;
-  /** True prep time. The player never sees this. */
+  /** Today's actual prep time, drawn from the kitchen's range. Never shown. */
   truePrep: number;
-  /** What the app claims the prep time is. Always <= truePrep. */
+  /**
+   * The honest expectation for this kitchen — the middle of its range, not a
+   * number derived from today's draw. Used for forecasting and for the verdict.
+   */
   shownPrep: number;
+  /** The range the player is shown. truePrep always falls inside it. */
+  prepLow: number;
+  prepHigh: number;
 }
 
 export type SlotKind = "HOT" | "COLD" | "ANY";

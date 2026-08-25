@@ -43,23 +43,48 @@ describe("generateOrder", () => {
   });
 
   /**
-   * The central deception in the design: the app never over-reports a wait.
-   * If this inverts, the restaurant-wait mechanic silently stops existing.
+   * These two used to assert the opposite — that the app never over-reported a
+   * wait, and that Biryani Junction was the worst liar. That deception was
+   * removed deliberately: the card now quotes each kitchen's real range, and
+   * the risk is not knowing today's draw inside it.
+   *
+   * The quote must therefore be unbiased, and the real time must always land
+   * inside what was advertised.
    */
-  it("never shows a prep time longer than the real one", () => {
+  it("never quotes a range the real prep time falls outside", () => {
     for (const o of sample(500)) {
-      expect(o.shownPrep).toBeLessThanOrEqual(o.truePrep);
+      expect(o.truePrep).toBeGreaterThanOrEqual(o.prepLow);
+      expect(o.truePrep).toBeLessThanOrEqual(o.prepHigh);
       expect(o.truePrep).toBeGreaterThan(0);
     }
   });
 
-  it("makes Biryani Junction the worst liar", () => {
-    const orders = sample(600).filter((o) => o.pickupId === "bj" || o.pickupId === "qk");
-    const gap = (id: string) => {
-      const set = orders.filter((o) => o.pickupId === id);
-      return set.reduce((s, o) => s + (o.truePrep - o.shownPrep), 0) / set.length;
+  it("quotes without bias — as often over the real wait as under", () => {
+    const orders = sample(800);
+    const over = orders.filter((o) => o.shownPrep > o.truePrep).length;
+    // An unbiased midpoint lands either side about half the time. The old
+    // generator was under 100% of the time by construction.
+    expect(over / orders.length).toBeGreaterThan(0.35);
+    expect(over / orders.length).toBeLessThan(0.65);
+  });
+
+  /**
+   * Biryani Junction is still the hard one — not because it lies, but because
+   * it is genuinely slow and genuinely unpredictable. That is what the player
+   * now reads off the card and weighs for themselves.
+   */
+  it("makes Biryani Junction the slowest and least predictable kitchen", () => {
+    const orders = sample(600);
+    const spread = (id: string) => {
+      const o = orders.find((x) => x.pickupId === id);
+      return o ? { width: o.prepHigh - o.prepLow, mid: o.shownPrep } : null;
     };
-    expect(gap("bj")).toBeGreaterThan(gap("qk") * 3);
+    const bj = spread("bj");
+    const qk = spread("qk");
+    if (!bj || !qk) return;
+
+    expect(bj.mid).toBeGreaterThan(qk.mid * 3);
+    expect(bj.width).toBeGreaterThan(qk.width * 3);
   });
 
   it("produces all three tiers over a large sample", () => {

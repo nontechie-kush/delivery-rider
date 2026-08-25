@@ -100,11 +100,6 @@ export interface PlaceBehaviour {
   /** Mean true prep time in game-minutes. */
   prepMean: number;
   prepSpread: number;
-  /**
-   * How much this place under-reports prep, as a fraction. 0 is honest, 0.55
-   * shows you 45% of the real wait.
-   */
-  optimism: number;
   /** Minutes lost at the door: the guard, the lift, the floor, the phone call. */
   handover: number;
   /** What this place actually sends out. */
@@ -498,26 +493,26 @@ export const DEFAULT_CONFIG: GameConfig = {
   places: {
     // A dark store picks packaged goods off a shelf. Genuinely three minutes,
     // and it barely needs to lie — which is why EXPRESS can exist at all.
-    qk: { prepMean: 3, prepSpread: 1.5, optimism: 0.12, handover: 1.5, temps: ["COLD", "AMBIENT", "AMBIENT", "COLD"] },
+    qk: { prepMean: 3, prepSpread: 1.5, handover: 1.5, temps: ["COLD", "AMBIENT", "AMBIENT", "COLD"] },
     // Biryani is cooked to order. Twenty-odd minutes is the honest number and
     // the app shows you less than half of it.
-    bj: { prepMean: 22, prepSpread: 8, optimism: 0.55, handover: 1.5, temps: ["HOT", "HOT", "HOT"] },
-    fc: { prepMean: 8, prepSpread: 3, optimism: 0.2, handover: 1.5, temps: ["HOT", "HOT", "COLD"] },
-    gm: { prepMean: 13, prepSpread: 5, optimism: 0.35, handover: 1.5, temps: ["AMBIENT", "AMBIENT", "COLD"] },
+    bj: { prepMean: 22, prepSpread: 8, handover: 1.5, temps: ["HOT", "HOT", "HOT"] },
+    fc: { prepMean: 8, prepSpread: 3, handover: 1.5, temps: ["HOT", "HOT", "COLD"] },
+    gm: { prepMean: 13, prepSpread: 5, handover: 1.5, temps: ["AMBIENT", "AMBIENT", "COLD"] },
 
     // Drops. Handover is the honest part nobody models: a pavement handover at
     // the metro takes two minutes, a gated Golf Course Road high-rise takes
     // seven by the time the guard, the lift and the floor are done with you.
-    d1: { prepMean: 0, prepSpread: 0, optimism: 0, handover: 2, temps: [] },
-    d2: { prepMean: 0, prepSpread: 0, optimism: 0, handover: 2.5, temps: [] },
-    d3: { prepMean: 0, prepSpread: 0, optimism: 0, handover: 3, temps: [] },
-    d4: { prepMean: 0, prepSpread: 0, optimism: 0, handover: 6, temps: [] },
-    d5: { prepMean: 0, prepSpread: 0, optimism: 0, handover: 7, temps: [] },
-    d6: { prepMean: 0, prepSpread: 0, optimism: 0, handover: 5, temps: [] },
-    d7: { prepMean: 0, prepSpread: 0, optimism: 0, handover: 3.5, temps: [] },
-    d8: { prepMean: 0, prepSpread: 0, optimism: 0, handover: 5.5, temps: [] },
+    d1: { prepMean: 0, prepSpread: 0, handover: 2, temps: [] },
+    d2: { prepMean: 0, prepSpread: 0, handover: 2.5, temps: [] },
+    d3: { prepMean: 0, prepSpread: 0, handover: 3, temps: [] },
+    d4: { prepMean: 0, prepSpread: 0, handover: 6, temps: [] },
+    d5: { prepMean: 0, prepSpread: 0, handover: 7, temps: [] },
+    d6: { prepMean: 0, prepSpread: 0, handover: 5, temps: [] },
+    d7: { prepMean: 0, prepSpread: 0, handover: 3.5, temps: [] },
+    d8: { prepMean: 0, prepSpread: 0, handover: 5.5, temps: [] },
   },
-  defaultPlace: { prepMean: 8, prepSpread: 3, optimism: 0.3, handover: 3, temps: ["AMBIENT"] },
+  defaultPlace: { prepMean: 8, prepSpread: 3, handover: 3, temps: ["AMBIENT"] },
 };
 
 /* --------------------------------------------------------------- helpers */

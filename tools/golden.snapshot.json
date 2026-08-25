@@ -1,22 +1,22 @@
 {
   "shifts": 1000,
   "seed": 42,
-  "checksum": "b333824a",
+  "checksum": "beedf978",
   "selective": {
     "shifts": 1000,
-    "delivered": 30169,
-    "onTime": 26735,
-    "late": 3434,
-    "fees": 696195,
-    "milestones": 749900,
-    "net": 928117,
-    "waiting": 60101.74303097812,
-    "waitingHidden": 13062.824982674816,
+    "delivered": 30115,
+    "onTime": 27084,
+    "late": 3031,
+    "fees": 699873,
+    "milestones": 768450,
+    "net": 953794,
+    "waiting": 56211.86088956303,
+    "waitingHidden": 0,
     "undelivered": 0,
     "hits": [
       1000,
-      982,
-      427
+      987,
+      455
     ]
   },
   "greedy": {
@@ -28,7 +28,7 @@
     "milestones": 366250,
     "net": 552735,
     "waiting": 39336.17419386648,
-    "waitingHidden": 8423.386020652877,
+    "waitingHidden": 0,
     "undelivered": 0,
     "hits": [
       962,
@@ -45,7 +45,7 @@
     "milestones": 521750,
     "net": 677255,
     "waiting": 54386.63658740894,
-    "waitingHidden": 11433.396222580279,
+    "waitingHidden": 0,
     "undelivered": 0,
     "hits": [
       1000,

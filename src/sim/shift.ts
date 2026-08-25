@@ -351,19 +351,19 @@ function collectAndDeliver(state: ShiftState): void {
 
   if (toCollect.length > 0) {
     const arrivedAt = state.clock;
-    // Wait for the slowest one. This is where the app's optimism gets paid for.
+    // Wait for the slowest one — the batch leaves when the last kitchen is done.
     const slowest = toCollect.reduce((a, b) => (readyAt(a.order) > readyAt(b.order) ? a : b));
     const latest = readyAt(slowest.order);
     if (latest > arrivedAt) {
       const waited = latest - arrivedAt;
       advance(state, waited);
-      // Name the gap explicitly. A lie the player cannot detect reads as a bug,
-      // not as a mechanic — this is the line that teaches them who to distrust.
-      const claimed = Math.max(0, slowest.order.shownPrep - (arrivedAt - slowest.order.offeredAt));
+      // Measured against the slow end of the range the card showed. Waiting
+      // inside the advertised range is not news; waiting past it is.
+      const claimed = Math.max(0, slowest.order.prepHigh - (arrivedAt - slowest.order.offeredAt));
       const gap = waited - claimed;
       state.log.push(
         `Waited ${waited.toFixed(0)} min at ${node(state.locationId).name}` +
-          (gap > 1.5 ? ` — the app said ${claimed.toFixed(0)}.` : "."),
+          (gap > 1.5 ? ` — longer than the ${claimed.toFixed(0)} min quoted.` : "."),
       );
     }
     // Bagging it up, even when it was ready and waiting.
@@ -398,7 +398,7 @@ function collectAndDeliver(state: ShiftState): void {
       lateBy,
       paid,
       waited: c.waited,
-      waitShown: c.order.shownPrep,
+      waitShown: c.order.prepHigh,
     });
 
     recordDelivery(state.duty, state.clock, state.cfg);

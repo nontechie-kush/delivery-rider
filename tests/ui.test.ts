@@ -65,22 +65,57 @@ describe("estimate", () => {
   });
 
   /**
-   * The advice inherits the platform's optimism on purpose: it forecasts with the
-   * prep time the app shows, not the real one. If this ever starts using truePrep,
-   * the UI becomes honest and the restaurant-wait mechanic loses its bite.
+   * This test used to assert the opposite: that the forecast inherited the
+   * platform's optimism and read better than the order deserved. That mechanic
+   * was removed deliberately — the card now shows the kitchen's real range, and
+   * the uncertainty comes from not knowing today's draw within it rather than
+   * from being lied to about the middle.
+   *
+   * What has to hold now is that the quoted range is honest and that the advice
+   * is conservative inside it.
    */
-  it("forecasts the wait from the shown prep time, not the real one", () => {
+  it("quotes a range the real prep time actually falls inside", () => {
     const s = onDutyAt(3);
     for (let i = 0; i < 60 && !s.offers.some((o) => o.pickupId === "bj"); i++) idle(s, 3);
-    const liar = s.offers.find((o) => o.pickupId === "bj");
-    if (!liar) return;
+    const slow = s.offers.find((o) => o.pickupId === "bj");
+    if (!slow) return;
 
-    const e = estimate(s, liar, E);
-    // The forecast wait can never exceed what the app claimed, even though the
-    // real prep is far longer. If this flips, the UI turns honest and the
-    // restaurant-wait mechanic quietly stops existing.
-    expect(e.waitClaimed).toBeLessThanOrEqual(liar.shownPrep + 1e-9);
-    expect(liar.truePrep).toBeGreaterThan(liar.shownPrep);
+    expect(slow.truePrep).toBeGreaterThanOrEqual(slow.prepLow);
+    expect(slow.truePrep).toBeLessThanOrEqual(slow.prepHigh);
+    // The shown figure is the middle of the range, not a number worked back
+    // from today's draw — so it cannot leak what today holds.
+    expect(slow.shownPrep).toBeCloseTo((slow.prepLow + slow.prepHigh) / 2, 6);
+  });
+
+  it("judges the fit against the slow end of the range, not the middle", () => {
+    const s = onDutyAt(3);
+    for (let i = 0; i < 60 && !s.offers.some((o) => o.pickupId === "bj"); i++) idle(s, 3);
+    const slow = s.offers.find((o) => o.pickupId === "bj");
+    if (!slow) return;
+
+    // "Comfortable" has to mean comfortable even when the kitchen is slow,
+    // otherwise the verdict is just the old lie wearing a different word.
+    const e = estimate(s, slow, E);
+    const toPickup = e.total - e.waitClaimed - e.toDrop - e.queue;
+    expect(e.waitClaimed).toBeCloseTo(Math.max(0, slow.prepHigh - toPickup), 4);
+  });
+
+  it("quotes the same range twice for the same kitchen", () => {
+    const s = onDutyAt(3);
+    const seen: number[][] = [];
+    for (let i = 0; i < 200 && seen.length < 2; i++) {
+      idle(s, 3);
+      for (const o of s.offers) {
+        if (o.pickupId === "bj" && !seen.some((r) => r[2] === o.truePrep)) {
+          seen.push([o.prepLow, o.prepHigh, o.truePrep]);
+        }
+      }
+    }
+    if (seen.length < 2) return;
+    // Two orders from one kitchen advertise identical ranges despite different
+    // real waits. The range describes the place, not the order.
+    expect(seen[0]![0]).toBeCloseTo(seen[1]![0]!, 6);
+    expect(seen[0]![1]).toBeCloseTo(seen[1]![1]!, 6);
   });
 });
 

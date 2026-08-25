@@ -58,7 +58,14 @@ describe("the design bet", () => {
     expect(top / SHIFTS).toBeLessThan(0.5);
   });
 
-  it("hides a meaningful share of restaurant waiting from the player", () => {
-    expect(selective.waitingHidden / selective.waiting).toBeGreaterThan(0.05);
+  /**
+   * The inverse of what this once asserted. Waiting is still a real cost of the
+   * day — it just is not a hidden one any more, because the card quotes the
+   * range the wait comes from. What is left unadvertised should be almost
+   * nothing.
+   */
+  it("no longer hides restaurant waiting from the player", () => {
+    expect(selective.waiting).toBeGreaterThan(0);
+    expect(selective.waitingHidden / selective.waiting).toBeLessThan(0.02);
   });
 });

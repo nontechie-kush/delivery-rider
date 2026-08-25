@@ -97,12 +97,13 @@ export function generateOrder(
   const dist = distance(pickupId, drop.id);
   const place = placeOf(pickupId, cfg);
 
-  const truePrep = Math.max(
-    1,
-    rng.float(place.prepMean - place.prepSpread, place.prepMean + place.prepSpread),
-  );
-  // The app never over-reports. That is the whole point of the mechanic.
-  const shownPrep = truePrep * (1 - place.optimism);
+  const prepLow = Math.max(1, place.prepMean - place.prepSpread);
+  const prepHigh = Math.max(prepLow, place.prepMean + place.prepSpread);
+  const truePrep = rng.float(prepLow, prepHigh);
+  // What the card shows is the kitchen's range, not a number worked back from
+  // today's draw. The player therefore knows what Biryani Junction is like and
+  // still does not know what today holds — the risk survives, the lie does not.
+  const shownPrep = (prepLow + prepHigh) / 2;
 
   const temps = place.temps.length > 0 ? place.temps : cfg.defaultPlace.temps;
 
@@ -119,6 +120,8 @@ export function generateOrder(
     fee: orderFee(tier, dist, cfg),
     truePrep,
     shownPrep,
+    prepLow,
+    prepHigh,
   };
 }
 

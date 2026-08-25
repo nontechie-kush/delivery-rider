@@ -31,15 +31,15 @@ export interface Estimate {
 /**
  * How long this order looks like it will take, and whether that fits the window.
  *
- * Deliberately uses `shownPrep` — the number the app displays — rather than the
- * real prep time. The estimate is therefore optimistic in exactly the way the
- * platform is optimistic, and orders from the places that under-report will
- * quietly read better here than they deserve to.
+ * Judged against the slow end of the kitchen's range rather than its middle.
+ * A verdict that reads "Comfortable" and leaves the rider late half the time is
+ * the same lie the optimistic prep times used to tell; this way the word means
+ * what it says, and the range on the card shows where it came from.
  */
 export function estimate(state: ShiftState, order: Order, cfg: GameConfig): Estimate {
   const toPickup = rideMinutes(state, state.locationId, order.pickupId);
   // Prep runs while the rider is on the way, so only the remainder is lost time.
-  const waitClaimed = Math.max(0, order.shownPrep - toPickup);
+  const waitClaimed = Math.max(0, order.prepHigh - toPickup);
   const toDrop = rideMinutes(state, order.pickupId, order.dropId);
   const queue = state.carried.length * cfg.queueCostPerOrder;
 

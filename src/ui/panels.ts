@@ -141,13 +141,14 @@ function offerCard(
       ${fuelLine(state, cfg, order.pickupId, order.dropId, order.fee)}
 
       ${routeStack(order.pickupId, order.dropId, {
-        pickupNote: `Ready in about ${mins(order.shownPrep)}`,
+        pickupNote: `Ready in ${Math.round(order.prepLow)}\u2013${mins(order.prepHigh)}`,
         dropNote: `${mins(Math.max(0, order.dueAt - state.clock))} left to deliver`,
       })}
 
       <!-- A real rider glances at an order and simply knows whether it fits. The
-           player has no such instinct, so the app renders it — from the prep time
-           the platform advertises, which is exactly how it misleads. -->
+           player has no such instinct, so the app renders it — against the slow
+           end of the kitchen's range, so "Comfortable" means comfortable even
+           when the food is slow rather than only when it is quick. -->
       <div class="fit ${est.verdict}">
         <span class="fitword">${VERDICT_LABEL[est.verdict]}</span>
         <span class="fitwhy">${mins(est.total)} of work · ${
