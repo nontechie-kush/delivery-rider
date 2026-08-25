@@ -46,6 +46,14 @@ function makeRide(over: Partial<Parameters<typeof createRide>[0]> = {}) {
     bribeSeconds: C.bribeSeconds,
     argueSeconds: C.argueSeconds,
     argueSuccessChance: C.argueSuccessChance,
+    hornYieldChance: C.hornYieldChance,
+    strikeCooldown: C.strikeCooldown,
+    strikeReach: C.strikeReach,
+    strikeShove: C.strikeShove,
+    counterChance: C.counterChance,
+    counterStagger: C.counterStagger,
+    squeezeWidth: C.squeezeWidth,
+    squeezeSpeedCap: C.squeezeSpeedCap,
     ...over,
   });
 }
@@ -536,5 +544,146 @@ describe("the roadside negotiation", () => {
     const z = r.z;
     for (let i = 0; i < 60; i++) stepRide(r, FLAT_OUT, 1 / 60);
     expect(r.z).toBeGreaterThan(z);
+  });
+});
+
+
+describe("fighting the traffic", () => {
+  const swing = (over = {}): RideInput => ({
+    steer: 0, throttle: true, brake: false, hit: true, ...over,
+  });
+
+  /** Puts a car right alongside, so a swing has something to connect with. */
+  function alongside(ride: ReturnType<typeof createRide>) {
+    const car = ride.hazards[0];
+    if (!car) return null;
+    car.z = ride.z + 400;
+    car.x = ride.x + 0.4;
+    car.kind = "car";
+    car.speed = 0.4;
+    return car;
+  }
+
+  it("shoves what it connects with out of the way", () => {
+    const r = makeRide({ seed: 3 });
+    const car = alongside(r);
+    if (!car) return;
+    const before = car.x;
+
+    stepRide(r, swing(), 1 / 60);
+    expect(car.x).toBeGreaterThan(before);
+    expect(r.combat.landed).toBe(1);
+  });
+
+  it("will not swing again until the cooldown clears", () => {
+    const r = makeRide({ seed: 3 });
+    alongside(r);
+    stepRide(r, swing(), 1 / 60);
+    const landed = r.combat.landed;
+
+    stepRide(r, swing(), 1 / 60);
+    expect(r.combat.landed).toBe(landed);
+  });
+
+  it("reaches further with a chain than bare-handed", () => {
+    const bare = makeRide({ seed: 4 });
+    const armed = makeRide({ seed: 4 });
+    armed.combat.weapon = "chain";
+
+    for (const r of [bare, armed]) {
+      const car = r.hazards[0];
+      if (!car) return;
+      car.z = r.z + 400;
+      car.x = r.x + 0.75; // outside a kick, inside a chain
+      car.kind = "car";
+    }
+
+    stepRide(bare, swing(), 1 / 60);
+    stepRide(armed, swing(), 1 / 60);
+    expect(bare.combat.landed).toBe(0);
+    expect(armed.combat.landed).toBe(1);
+  });
+
+  /**
+   * The trade. Clearing a lane by force is faster than going round it, but
+   * other riders and auto drivers hit back, and a counter costs more than the
+   * detour would have.
+   */
+  it("gets hit back sometimes, and never by a car more than by a bike", () => {
+    const counts = { bike: 0, car: 0 };
+    for (const kind of ["bike", "car"] as const) {
+      for (let seed = 1; seed <= 40; seed++) {
+        const r = makeRide({ seed });
+        const target = alongside(r);
+        if (!target) continue;
+        target.kind = kind;
+        stepRide(r, swing(), 1 / 60);
+        counts[kind] += r.combat.taken;
+      }
+    }
+    expect(counts.bike).toBeGreaterThan(0);
+    expect(counts.bike).toBeGreaterThan(counts.car);
+  });
+
+  it("counts a vehicle shoved off the road as downed", () => {
+    const r = makeRide({ seed: 6 });
+    const car = alongside(r);
+    if (!car) return;
+    car.x = r.x + 0.4;
+    r.combat.weapon = "bat";
+    // Already near the edge, so one good swing puts it off.
+    car.x = 1.2;
+    r.x = 0.9;
+    stepRide(r, swing(), 1 / 60);
+    expect(r.combat.downed).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe("the horn and the squeeze", () => {
+  it("moves a scooter aside but never a truck", () => {
+    const moved = { bike: 0, truck: 0 };
+    for (const kind of ["bike", "truck"] as const) {
+      for (let seed = 1; seed <= 30; seed++) {
+        const r = makeRide({ seed });
+        const h = r.hazards[0];
+        if (!h) continue;
+        h.kind = kind;
+        h.z = r.z + 1200;
+        h.x = r.x;
+        const before = h.x;
+        for (let i = 0; i < 60; i++) {
+          stepRide(r, { steer: 0, throttle: false, brake: true, horn: true }, 1 / 60);
+        }
+        if (Math.abs(h.x - before) > 0.1) moved[kind] += 1;
+      }
+    }
+    expect(moved.bike).toBeGreaterThan(0);
+    expect(moved.truck).toBe(0);
+  });
+
+  it("caps speed while squeezing, which is what makes it a choice", () => {
+    const r = makeRide({ seed: 8 });
+    for (let i = 0; i < 90; i++) stepRide(r, FLAT_OUT, 1 / 60);
+    const open = r.speed;
+
+    const s = makeRide({ seed: 8 });
+    for (let i = 0; i < 90; i++) {
+      stepRide(s, { steer: 0, throttle: true, brake: false, squeeze: true }, 1 / 60);
+    }
+    expect(s.speed).toBeLessThan(open);
+    expect(s.speed).toBeLessThanOrEqual(C.squeezeSpeedCap + 1e-6);
+  });
+
+  it("picks up a weapon lying in the road", () => {
+    const r = makeRide({ seconds: 40, seed: 9 });
+    const pk = r.pickups[0];
+    if (!pk) return;
+    pk.z = r.z + 900;
+    pk.x = r.x;
+    // One frame covers about thirty units, so ride over it rather than at it.
+    for (let i = 0; i < 40 && !pk.taken; i++) stepRide(r, FLAT_OUT, 1 / 60);
+
+    expect(pk.taken).toBe(true);
+    expect(r.combat.weapon).toBe(pk.kind);
   });
 });

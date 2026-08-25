@@ -87,11 +87,20 @@ export function runRide(
       <div class="ridelight" hidden><i></i><span></span></div>
       <div class="ridemeter"><i></i></div>
       <div class="ridecontrols">
-        <button class="rc left" data-steer="-1" aria-label="Left"></button>
-        <button class="rc gas" data-gas="1" aria-label="Accelerate"><span>GO</span></button>
-        <button class="rc right" data-steer="1" aria-label="Right"></button>
+        <div class="rc-row minor">
+          <button class="rc small horn" data-horn="1" aria-label="Horn">HORN</button>
+          <button class="rc small brake" data-brake="1" aria-label="Brake">BRAKE</button>
+          <button class="rc small hit" data-hit="1" aria-label="Swing">
+            <span class="hit-label">KICK</span>
+          </button>
+        </div>
+        <div class="rc-row">
+          <button class="rc left" data-steer="-1" aria-label="Left"></button>
+          <button class="rc gas" data-gas="1" aria-label="Accelerate"><span>GO</span></button>
+          <button class="rc right" data-steer="1" aria-label="Right"></button>
+        </div>
       </div>
-      <div class="ridehint">Hold GO. Steer with the arrows. Traffic hurts.</div>
+      <div class="ridehint">Hold GO · both arrows to squeeze through a gap</div>
       <div class="police" hidden>
         <div class="pol-card">
           <b>Pulled over</b>
@@ -112,14 +121,24 @@ export function runRide(
   const stats = host.querySelector<HTMLElement>(".ridestats")!;
   const lightBox = host.querySelector<HTMLElement>(".ridelight")!;
   const police = host.querySelector<HTMLElement>(".police")!;
+  const hitLabel = host.querySelector<HTMLElement>(".hit-label")!;
   const lightText = host.querySelector<HTMLElement>(".ridelight span")!;
   const ctx = canvas.getContext("2d")!;
 
-  const input = { steer: 0, throttle: false, brake: false };
+  const input = {
+    steer: 0,
+    throttle: false,
+    brake: false,
+    horn: false,
+    squeeze: false,
+    hit: false,
+  };
   const held = new Set<string>();
 
   const syncSteer = (): void => {
     input.steer = (held.has("1") ? 1 : 0) - (held.has("-1") ? 1 : 0);
+    // Holding both is not a contradiction, it is pulling your elbows in.
+    input.squeeze = held.has("1") && held.has("-1");
   };
 
   // The roadside negotiation, which pauses everything until it is settled.
@@ -137,6 +156,9 @@ export function runRide(
     if (!el) return;
     event.preventDefault();
     if (el.dataset["gas"]) input.throttle = true;
+    else if (el.dataset["horn"]) input.horn = true;
+    else if (el.dataset["brake"]) input.brake = true;
+    else if (el.dataset["hit"]) input.hit = true;
     else if (el.dataset["steer"]) {
       held.add(el.dataset["steer"]);
       syncSteer();
@@ -144,6 +166,8 @@ export function runRide(
   };
   const onUp = (): void => {
     input.throttle = false;
+    input.horn = false;
+    input.brake = false;
     held.clear();
     syncSteer();
   };
@@ -157,6 +181,12 @@ export function runRide(
       input.throttle = down;
     } else if (event.key === "ArrowDown" || event.key === "s") {
       input.brake = down;
+    } else if (event.key === "h") {
+      input.horn = down;
+    } else if (event.key === "f" || event.key === "Enter") {
+      input.hit = down;
+    } else if (event.key === "Shift") {
+      input.squeeze = down;
     } else return;
     event.preventDefault();
     syncSteer();
@@ -192,6 +222,8 @@ export function runRide(
       last = now;
 
       if (!cancelled) stepRide(ride, input, dt);
+      // A strike is a tap, not a hold, so it is spent the frame it is read.
+      input.hit = false;
       resize(canvas);
       draw(ctx, canvas, ride);
       meter.style.width = `${Math.min(100, (ride.z / ride.finishZ) * 100)}%`;
@@ -210,6 +242,8 @@ export function runRide(
       // Red when the projection says this one is not going to make it.
       const willBeLate = label.slackMinutes !== null && eta > label.slackMinutes;
       stats.className = `ridestats ${willBeLate ? "late" : ""}`;
+
+      hitLabel.textContent = ride.combat.weapon === "none" ? "KICK" : ride.combat.weapon.toUpperCase();
 
       if (ride.heldBy) {
         police.hidden = false;
@@ -327,6 +361,7 @@ function draw(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, ride: Ri
   }
 
   drawSignals(ctx, canvas, ride, playerX);
+  drawPickups(ctx, canvas, ride, playerX);
   drawHazards(ctx, canvas, ride, playerX);
   drawRider(ctx, canvas, ride);
 }
@@ -476,4 +511,70 @@ function drawRider(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, rid
   // Wobble when staggered from a hit, so a spill reads without a message.
   const lean = ride.stagger > 0 ? Math.sin(ride.elapsed * 42) * 0.18 : 0;
   drawPlayerBike(ctx, w / 2, h * 0.9, w * 0.15, lean, ride.stagger > 0);
+
+  // The swing, drawn as an arc out to whichever side it went.
+  const c = ride.combat;
+  if (c.swing <= 0) return;
+
+  const reach = w * (c.weapon === "chain" ? 0.3 : c.weapon === "bat" ? 0.24 : 0.17);
+  const progress = 1 - c.swing / 0.28;
+  const angle = (-0.5 + progress * 1.1) * c.swingSide;
+  const cx = w / 2;
+  const cy = h * 0.83;
+
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(angle);
+  ctx.strokeStyle = c.weapon === "none" ? "#e8ebe3" : c.weapon === "chain" ? "#b9c2bb" : "#a9713f";
+  ctx.lineWidth = c.weapon === "bat" ? w * 0.022 : w * 0.014;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(reach * c.swingSide, -reach * 0.25);
+  ctx.stroke();
+
+  // A smear behind the swing so a fast arc reads at 60fps.
+  ctx.globalAlpha = 0.28;
+  ctx.beginPath();
+  ctx.arc(0, 0, reach, angle - 0.5 * c.swingSide, angle, c.swingSide < 0);
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** A chain or a bat lying in the road, worth swerving toward. */
+function drawPickups(
+  ctx: CanvasRenderingContext2D,
+  canvas: HTMLCanvasElement,
+  ride: RideState,
+  playerX: number,
+): void {
+  const { width: w, height: h } = canvas;
+  const probe: Point = {
+    world: { x: 0, y: 0, z: 0 },
+    camera: { x: 0, y: 0, z: 0 },
+    screen: { x: 0, y: 0, w: 0, scale: 0 },
+  };
+
+  for (const pk of ride.pickups) {
+    if (pk.taken || pk.z < ride.z || pk.z > ride.z + 30000) continue;
+    probe.world.x = pk.x * ROAD_WIDTH;
+    probe.world.y = 0;
+    probe.world.z = pk.z;
+    project(probe, playerX, CAMERA_HEIGHT, ride.z, w, h);
+    if (probe.screen.w <= 1) continue;
+
+    const size = Math.max(2, probe.screen.w * 0.16);
+    ctx.save();
+    ctx.translate(probe.screen.x, probe.screen.y - size * 0.3);
+    // A slow spin, so it reads as a thing to take rather than a thing to dodge.
+    ctx.rotate(Math.sin(ride.elapsed * 2 + pk.z) * 0.4);
+    ctx.strokeStyle = pk.kind === "chain" ? "#c6cfc8" : "#b5763f";
+    ctx.lineWidth = Math.max(1.5, size * 0.22);
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(-size, 0);
+    ctx.lineTo(size, 0);
+    ctx.stroke();
+    ctx.restore();
+  }
 }

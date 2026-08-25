@@ -425,7 +425,7 @@ button:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
   right: 0;
   bottom: 0;
   display: flex;
-  gap: 10px;
+  flex-direction: column;
   padding: 14px 14px calc(18px + env(safe-area-inset-bottom, 0px));
   touch-action: none;
 }
@@ -457,7 +457,7 @@ button:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 .rc.gas:active { background: #2af0af; }
 .rc.gas span { font-size: 17px; font-weight: 800; letter-spacing: 0.08em; }
 
-.ridehint { position: absolute; left: 0; right: 0; bottom: 104px; text-align: center; font-size: 11.5px; color: rgba(255, 255, 255, 0.45); pointer-events: none; }
+.ridehint { position: absolute; left: 0; right: 0; bottom: 168px; text-align: center; font-size: 11.5px; color: rgba(255, 255, 255, 0.45); pointer-events: none; }
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 
@@ -667,3 +667,20 @@ button:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 .stat-fuel.low .fuel-bar i { background: var(--amber); }
 .stat-fuel.bad { color: var(--red); }
 .stat-fuel.bad .fuel-bar i { background: var(--red); }
+
+/* ------------------------------------------------------------ ride combat */
+
+/* Six touch targets in two rows: the driving verbs where thumbs rest, and the
+   fighting verbs above them, smaller, because they are optional. */
+.rc-row { display: flex; gap: 10px; }
+.rc-row.minor { margin-bottom: 8px; }
+.rc.small {
+  flex: 1; height: 46px; font-size: 12px; font-weight: 800; letter-spacing: 0.09em;
+  color: rgba(255, 255, 255, 0.72);
+}
+.rc.horn:active { background: rgba(255, 176, 46, 0.28); }
+.rc.hit { color: #ffb9ab; border-color: rgba(255, 106, 82, 0.4); }
+.rc.hit:active { background: rgba(255, 106, 82, 0.3); }
+.hit-label { font-size: 12px; font-weight: 800; letter-spacing: 0.09em; }
+
+.rc.brake:active { background: rgba(255, 255, 255, 0.2); }

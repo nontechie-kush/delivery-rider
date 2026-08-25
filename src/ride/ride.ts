@@ -43,6 +43,31 @@ export interface Signal {
   ranIt: boolean;
 }
 
+export type Weapon = "none" | "chain" | "bat";
+
+/** Something lying in the road worth swerving for rather than away from. */
+export interface Pickup {
+  z: number;
+  x: number;
+  kind: Weapon;
+  taken: boolean;
+}
+
+/** How the rider is dealing with whatever is in the way. */
+export interface Combat {
+  /** Seconds until the next strike is available. */
+  cooldown: number;
+  /** Seconds of swing left, for the animation and the hit window. */
+  swing: number;
+  /** Which way the last swing went, so it draws on the right side. */
+  swingSide: -1 | 1;
+  weapon: Weapon;
+  landed: number;
+  taken: number;
+  /** Vehicles shoved clean off the road. */
+  downed: number;
+}
+
 export interface RideState {
   road: Segment[];
   hazards: Hazard[];
@@ -80,6 +105,19 @@ export interface RideState {
   /** A police stop in progress, waiting on the player to decide. */
   heldBy: PoliceStop | null;
   bribe: { min: number; max: number; seconds: number; argueSeconds: number; argueChance: number };
+  pickups: Pickup[];
+  combat: Combat;
+  /** Tuning handed down from config so the ride stays self-contained. */
+  rules: {
+    hornYield: Record<string, number>;
+    strikeCooldown: number;
+    strikeReach: number;
+    strikeShove: Record<string, number>;
+    counterChance: Record<string, number>;
+    counterStagger: number;
+    squeezeWidth: number;
+    squeezeSpeedCap: number;
+  };
   rand: () => number;
 }
 
@@ -108,6 +146,11 @@ export interface RideResult {
   redsRun: number;
   /** Rupees handed over at the roadside. */
   bribesPaid: number;
+  /** Strikes landed, taken, and vehicles put off the road. */
+  landed: number;
+  taken: number;
+  downed: number;
+  weapon: Weapon;
 }
 
 export interface RideOptions {
@@ -126,6 +169,14 @@ export interface RideOptions {
   bribeSeconds: number;
   argueSeconds: number;
   argueSuccessChance: number;
+  hornYieldChance: Record<string, number>;
+  strikeCooldown: number;
+  strikeReach: number;
+  strikeShove: Record<string, number>;
+  counterChance: Record<string, number>;
+  counterStagger: number;
+  squeezeWidth: number;
+  squeezeSpeedCap: number;
 }
 
 const TOP_SPEED = 5200; // world units per second
@@ -183,10 +234,43 @@ export function createRide(opts: RideOptions): RideState {
     });
   }
 
+  // A chain or a bat lying in the road, rarely. Finding one is the reward for
+  // looking where you are going rather than only at what is in front.
+  const pickups: Pickup[] = [];
+  const weaponCount = Math.floor(finishZ / 90000);
+  for (let i = 0; i < weaponCount; i++) {
+    pickups.push({
+      z: 6000 + rand() * (finishZ - 9000),
+      x: (rand() - 0.5) * 1.3,
+      kind: rand() < 0.6 ? "chain" : "bat",
+      taken: false,
+    });
+  }
+
   return {
     road,
     hazards,
     signals,
+    pickups,
+    combat: {
+      cooldown: 0,
+      swing: 0,
+      swingSide: 1,
+      weapon: "none",
+      landed: 0,
+      taken: 0,
+      downed: 0,
+    },
+    rules: {
+      hornYield: opts.hornYieldChance,
+      strikeCooldown: opts.strikeCooldown,
+      strikeReach: opts.strikeReach,
+      strikeShove: opts.strikeShove,
+      counterChance: opts.counterChance,
+      counterStagger: opts.counterStagger,
+      squeezeWidth: opts.squeezeWidth,
+      squeezeSpeedCap: opts.squeezeSpeedCap,
+    },
     waiting: 0,
     redsRun: 0,
     waitedSeconds: 0,
@@ -222,6 +306,12 @@ export interface RideInput {
   /** Held to accelerate. Letting go coasts; braking is the other direction. */
   throttle: boolean;
   brake: boolean;
+  /** Held. Traffic ahead may or may not care. */
+  horn?: boolean;
+  /** Held. Narrows the rider to thread a gap, at the cost of speed. */
+  squeeze?: boolean;
+  /** Tapped. Swings at whatever is alongside. */
+  hit?: boolean;
 }
 
 /** Whether a signal is showing red at a given moment. Red is the last third. */
@@ -280,9 +370,17 @@ export function stepRide(ride: RideState, input: RideInput, dt: number): void {
     ride.speed = Math.max(0.22, ride.speed - DRAG * dt * 0.4);
   }
 
+  // Squeezing: pull your elbows in and thread the gap. Narrower, but slower,
+  // and there is nothing left in reserve if it turns out not to fit.
+  const squeezing = input.squeeze === true;
+  if (squeezing) ride.speed = Math.min(ride.speed, ride.rules.squeezeSpeedCap);
+
   // Steering. A loaded bag turns like a loaded bag.
-  const agility = 1.55 * (1 - ride.load * 0.35);
+  const agility = 1.55 * (1 - ride.load * 0.35) * (squeezing ? 1.25 : 1);
   ride.x += input.steer * agility * dt;
+
+  if (input.horn === true) soundHorn(ride, dt);
+  updateCombat(ride, input, dt);
 
   // A bend throws you outward the faster you take it.
   const bend = curveAhead(ride.road, ride.z);
@@ -297,7 +395,8 @@ export function stepRide(ride: RideState, input: RideInput, dt: number): void {
 
   moveTraffic(ride, dt);
 
-  if (!staggered) checkCollisions(ride);
+  if (!staggered) checkCollisions(ride, squeezing);
+  collectPickups(ride);
   checkSignals(ride);
 
   if (ride.z >= ride.finishZ) ride.done = true;
@@ -358,12 +457,100 @@ function redAhead(ride: RideState, z: number): Signal | null {
   return best;
 }
 
-function checkCollisions(ride: RideState): void {
+/**
+ * Leaning on the horn.
+ *
+ * Indian traffic runs on it, and what gives way tells you what you are behind:
+ * a scooter usually moves, an auto might, a truck never does. It is the polite
+ * half of the same instinct as the chain.
+ */
+function soundHorn(ride: RideState, dt: number): void {
+  for (const h of ride.hazards) {
+    const gap = h.z - ride.z;
+    if (gap < 200 || gap > 5200) continue;
+    if (Math.abs(h.x - ride.x) > 0.42) continue;
+
+    const yields = ride.rules.hornYield[h.kind] ?? 0;
+    if (yields <= 0) continue;
+    // Per second, so a long hold works where a stab does not.
+    if (ride.rand() > yields * dt * 2.2) continue;
+
+    h.x += h.x >= ride.x ? 0.55 : -0.55;
+    h.x = Math.max(-1.4, Math.min(1.4, h.x));
+  }
+}
+
+/**
+ * Swinging at whatever is alongside.
+ *
+ * A shove clears the lane instantly, which is faster than going round — and
+ * that is the trade, because other riders and auto drivers hit back, and a
+ * counter costs more than the detour would have. Bare-handed is a kick; a
+ * chain has reach; a bat has neither subtlety nor a good reason to exist.
+ */
+function updateCombat(ride: RideState, input: RideInput, dt: number): void {
+  const c = ride.combat;
+  if (c.cooldown > 0) c.cooldown -= dt;
+  if (c.swing > 0) c.swing -= dt;
+
+  if (input.hit !== true || c.cooldown > 0) return;
+
+  const reach = ride.rules.strikeReach + (c.weapon === "chain" ? 0.28 : c.weapon === "bat" ? 0.16 : 0);
+
+  // Nearest thing alongside, either side.
+  let target: Hazard | null = null;
+  let best = Infinity;
+  for (const h of ride.hazards) {
+    const gap = h.z - ride.z;
+    if (gap < -300 || gap > 900) continue;
+    const side = Math.abs(h.x - ride.x);
+    if (side > reach + h.width || side >= best) continue;
+    best = side;
+    target = h;
+  }
+
+  c.cooldown = ride.rules.strikeCooldown;
+  c.swing = 0.28;
+  c.swingSide = target && target.x < ride.x ? -1 : 1;
+  if (!target) return;
+
+  const shove = ride.rules.strikeShove[c.weapon] ?? 0.5;
+  target.x += c.swingSide * shove;
+  c.landed += 1;
+
+  // Shoved clean off the tarmac and out of the way for good.
+  if (Math.abs(target.x) > 1.5) {
+    target.speed = 0;
+    c.downed += 1;
+  }
+
+  if (ride.rand() < (ride.rules.counterChance[target.kind] ?? 0)) {
+    c.taken += 1;
+    ride.stagger = ride.rules.counterStagger;
+    ride.speed = Math.max(0.16, ride.speed - 0.3);
+    ride.minutesLost += 0.6;
+  }
+}
+
+/** A weapon in the road is worth swerving toward rather than away from. */
+function collectPickups(ride: RideState): void {
+  for (const p of ride.pickups) {
+    if (p.taken) continue;
+    if (p.z > ride.z || p.z < ride.z - 500) continue;
+    if (Math.abs(p.x - ride.x) > 0.42) continue;
+    p.taken = true;
+    ride.combat.weapon = p.kind;
+  }
+}
+
+function checkCollisions(ride: RideState, squeezing: boolean): void {
+  const shrink = squeezing ? ride.rules.squeezeWidth : 1;
+
   for (const h of ride.hazards) {
     const gap = h.z - ride.z;
     if (gap > 0 || gap < -420) continue;
 
-    if (Math.abs(h.x - ride.x) < h.width + 0.1) {
+    if (Math.abs(h.x - ride.x) < h.width + 0.1 * shrink) {
       ride.crashes += 1;
       // A heavier bag hits harder and takes longer to get going again.
       ride.minutesLost += CRASH_MINUTES * (1 + ride.load * 0.6);
@@ -449,5 +636,9 @@ export function rideResult(ride: RideState): RideResult {
     pace: Math.max(0, Math.min(1, expected / moving)),
     redsRun: ride.redsRun,
     bribesPaid: ride.bribesPaid,
+    landed: ride.combat.landed,
+    taken: ride.combat.taken,
+    downed: ride.combat.downed,
+    weapon: ride.combat.weapon,
   };
 }

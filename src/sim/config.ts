@@ -213,6 +213,25 @@ export interface GameConfig {
    */
   signalRunCrashChance: number;
   signalRunStopChance: number;
+  /* ------------------------------------------------------- fighting back */
+  /**
+   * Leaning on the horn. Indian traffic genuinely runs on it: hold it and the
+   * scooter ahead usually gives way, an auto sometimes does, a truck never.
+   */
+  hornYieldChance: Record<string, number>;
+  /** Seconds between strikes, and how far to the side one reaches. */
+  strikeCooldown: number;
+  strikeReach: number;
+  /** How hard a bare kick and each weapon shove a vehicle aside. */
+  strikeShove: Record<string, number>;
+  /** Odds the target hits back, by what they are. */
+  counterChance: Record<string, number>;
+  /** Seconds a counter staggers the rider. */
+  counterStagger: number;
+  /** How much narrower the rider is while squeezing, and what it costs in speed. */
+  squeezeWidth: number;
+  squeezeSpeedCap: number;
+
   /** What it takes to be waved on, and what arguing costs instead. */
   bribeMin: number;
   bribeMax: number;
@@ -377,6 +396,20 @@ export const DEFAULT_CONFIG: GameConfig = {
   // another quarter in being pulled over. Over half of them cost nothing.
   signalRunCrashChance: 0.18,
   signalRunStopChance: 0.26,
+  // A scooter will move for a horn, an auto might, a truck will not, and a cow
+  // has never moved for anything.
+  hornYieldChance: { bike: 0.55, auto: 0.22, car: 0.3, truck: 0, pothole: 0 },
+  strikeCooldown: 0.75,
+  strikeReach: 0.5,
+  // Bare-handed is a shove; a chain has reach; a bat has neither subtlety nor
+  // a good reason to exist, which is rather the point.
+  strikeShove: { none: 0.5, chain: 0.95, bat: 1.25 },
+  // Other riders hit back hardest. Auto drivers are game for it. Cars are sealed.
+  counterChance: { bike: 0.42, auto: 0.3, car: 0.08, truck: 0.05, pothole: 0 },
+  counterStagger: 0.85,
+  squeezeWidth: 0.55,
+  squeezeSpeedCap: 0.62,
+
   bribeMin: 100,
   bribeMax: 300,
   bribeSeconds: 6,
