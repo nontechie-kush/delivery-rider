@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_CONFIG as C } from "../src/sim/config.js";
 import {
+  argue,
   createRide,
+  payBribe,
   rideResult,
   signalIsRed,
   stepRide,
@@ -38,15 +40,28 @@ function makeRide(over: Partial<Parameters<typeof createRide>[0]> = {}) {
     seed: 1,
     signalWaitSeconds: C.signalWaitSeconds,
     signalRunCrashChance: C.signalRunCrashChance,
+    signalRunStopChance: C.signalRunStopChance,
+    bribeMin: C.bribeMin,
+    bribeMax: C.bribeMax,
+    bribeSeconds: C.bribeSeconds,
+    argueSeconds: C.argueSeconds,
+    argueSuccessChance: C.argueSuccessChance,
     ...over,
   });
 }
 const COAST: RideInput = { steer: 0, throttle: false, brake: false };
 
-/** Runs a ride to completion, or until it plainly is not going to finish. */
+/**
+ * Runs a ride to completion, or until it plainly is not going to finish.
+ *
+ * Settles any police stop by paying, because the ride freezes until someone
+ * decides — a stop left hanging is a ride that never ends, which is exactly
+ * what a first draft of this helper did.
+ */
 function playOut(ride: ReturnType<typeof createRide>, input: RideInput, maxSeconds = 240) {
   let t = 0;
   while (!ride.done && t < maxSeconds) {
+    if (ride.heldBy) payBribe(ride);
     stepRide(ride, input, 1 / 60);
     t += 1 / 60;
   }
@@ -436,5 +451,90 @@ describe("traffic obeys the lights", () => {
     // Over thirty seconds every light cycles, so traffic must have advanced.
     const advanced = after.filter((z, i) => z > (before[i] ?? 0)).length;
     expect(advanced).toBeGreaterThan(0);
+  });
+});
+
+
+describe("jumping a red", () => {
+  /**
+   * Most jumped reds cost nothing, which is exactly why riders keep jumping
+   * them — and why the times it goes wrong land as bad luck rather than a rule.
+   */
+  it("stops the rider on only a minority of the reds they jump", () => {
+    let reds = 0;
+    let stops = 0;
+    for (let seed = 1; seed <= 60; seed++) {
+      const r = makeRide({ seconds: 40, seed });
+      // Count stops as they happen, since paying clears the flag.
+      let held = 0;
+      let t = 0;
+      while (!r.done && t < 400) {
+        if (r.heldBy) {
+          held += 1;
+          payBribe(r);
+        }
+        stepRide(r, FLAT_OUT, 1 / 60);
+        t += 1 / 60;
+      }
+      reds += r.redsRun;
+      stops += held;
+    }
+    if (reds === 0) return;
+    // Roughly a quarter, per config. Well under half is the point: getting away
+    // with it is the norm, which is why riders keep doing it.
+    expect(stops / reds).toBeLessThan(0.5);
+  });
+
+  it("adds up to one across the three outcomes", () => {
+    const nothing = 1 - C.signalRunCrashChance - C.signalRunStopChance;
+    expect(nothing).toBeGreaterThan(0.5);
+    expect(C.signalRunCrashChance + C.signalRunStopChance).toBeLessThan(0.5);
+  });
+});
+
+describe("the roadside negotiation", () => {
+  /** Build a ride already held by police, without waiting for the dice. */
+  function held() {
+    const r = makeRide({ seconds: 20, seed: 5 });
+    r.heldBy = { demanded: 200, settled: false };
+    return r;
+  }
+
+  it("freezes the ride until it is settled", () => {
+    const r = held();
+    const z = r.z;
+    for (let i = 0; i < 120; i++) stepRide(r, FLAT_OUT, 1 / 60);
+    expect(r.z).toBe(z);
+    expect(r.speed).toBe(0);
+  });
+
+  it("paying costs the money and barely any time", () => {
+    const r = held();
+    payBribe(r);
+    expect(r.bribesPaid).toBe(200);
+    expect(r.heldBy).toBeNull();
+    expect(r.minutesLost).toBeLessThan(2);
+  });
+
+  /** Arguing is the gamble: usually free, always slow. */
+  it("arguing always costs time and sometimes costs the money anyway", () => {
+    let won = 0;
+    for (let seed = 1; seed <= 30; seed++) {
+      const r = makeRide({ seconds: 20, seed });
+      r.heldBy = { demanded: 200, settled: false };
+      if (argue(r)) won += 1;
+      expect(r.minutesLost).toBeGreaterThan(2);
+      expect(r.heldBy).toBeNull();
+    }
+    expect(won).toBeGreaterThan(0);
+    expect(won).toBeLessThan(30);
+  });
+
+  it("lets the ride continue once settled", () => {
+    const r = held();
+    payBribe(r);
+    const z = r.z;
+    for (let i = 0; i < 60; i++) stepRide(r, FLAT_OUT, 1 / 60);
+    expect(r.z).toBeGreaterThan(z);
   });
 });

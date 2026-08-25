@@ -204,9 +204,22 @@ export interface GameConfig {
    */
   ridePaceFloor: number;
   ridePaceCeiling: number;
-  /** Seconds a red light holds you, and the odds of it going wrong if you run it. */
+  /** Seconds a red light holds you. */
   signalWaitSeconds: number;
+  /**
+   * What happens when a red gets jumped. Most of the time nothing does, which
+   * is exactly why riders keep doing it — and why the times it goes wrong land
+   * as bad luck rather than as a rule.
+   */
   signalRunCrashChance: number;
+  signalRunStopChance: number;
+  /** What it takes to be waved on, and what arguing costs instead. */
+  bribeMin: number;
+  bribeMax: number;
+  bribeSeconds: number;
+  argueSeconds: number;
+  /** Odds that arguing works and costs nothing but the time. */
+  argueSuccessChance: number;
 
   /* ------------------------------------------------------- how it reads */
   /** Minutes the fit estimate assumes each order already in the bag costs. */
@@ -360,7 +373,15 @@ export const DEFAULT_CONFIG: GameConfig = {
   ridePaceFloor: 0.85,
   ridePaceCeiling: 1.18,
   signalWaitSeconds: 4,
-  signalRunCrashChance: 0.35,
+  // Roughly a fifth of jumped reds end in something coming the other way, and
+  // another quarter in being pulled over. Over half of them cost nothing.
+  signalRunCrashChance: 0.18,
+  signalRunStopChance: 0.26,
+  bribeMin: 100,
+  bribeMax: 300,
+  bribeSeconds: 6,
+  argueSeconds: 22,
+  argueSuccessChance: 0.55,
 
   queueCostPerOrder: 17,
   verdictBands: { easy: 0.45, tight: 0.7, risky: 0.92 },

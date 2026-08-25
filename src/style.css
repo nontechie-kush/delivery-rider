@@ -623,3 +623,35 @@ button:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 .stat-busy em { display: block; font-style: normal; font-size: 9.5px; font-weight: 500; letter-spacing: 0.04em; text-transform: none; color: var(--dimmer); margin-top: 1px; }
 
 .hint { font-size: 12px; color: var(--dimmer); line-height: 1.45; margin: 0 0 10px; }
+
+/* --------------------------------------------------- roadside negotiation */
+
+/* Most jumped reds cost nothing, which is why riders keep jumping them. When
+   one does not, it is a negotiation rather than a ticket — and choosing between
+   paying to move and arguing to save the money is the choice a real rider makes
+   with a delivery clock running. */
+.police {
+  position: absolute; inset: 0; z-index: 30;
+  background: rgba(6, 10, 12, 0.86);
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+}
+.police[hidden] { display: none; }
+.pol-card { background: var(--card); border: 1px solid #4a3a1c; border-radius: 8px; padding: 20px; max-width: 340px; }
+.pol-card b { display: block; font-size: 19px; font-weight: 750; color: var(--amber); }
+.pol-card p { font-size: 14px; color: var(--dim); line-height: 1.5; margin: 6px 0 16px; }
+.pol-card p span { color: var(--text); font-weight: 700; }
+.pol-acts { display: flex; flex-direction: column; gap: 8px; }
+.pol-acts button {
+  border: 1px solid var(--line); background: var(--card-2); color: var(--text);
+  padding: 12px 14px; text-align: left; font-size: 14.5px; font-weight: 650; min-height: 52px;
+}
+.pol-acts button em { display: block; font-style: normal; font-size: 11.5px; font-weight: 400; color: var(--dimmer); margin-top: 2px; }
+.pol-pay { border-color: var(--amber) !important; color: var(--amber) !important; }
+.pol-acts button:hover { border-color: var(--dim); }
+
+/* Low fuel offers the way there, as a navigation app would. */
+.warn.act { border: 0; font: inherit; font-size: 11px; font-weight: 600; cursor: pointer; }
+.warn.act:hover { background: #3a3018; }
+
+.pol-amt, .pol-amt2 { font-variant-numeric: tabular-nums; }
+.pol-argue { color: var(--dim) !important; }

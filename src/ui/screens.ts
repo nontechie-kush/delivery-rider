@@ -143,7 +143,14 @@ export function summaryScreen(state: ShiftState, cfg: GameConfig): string {
         }
         <tr class="out"><td>${vehicle.refillIsWholeUnit ? "Battery" : "Petrol"} <em>${km(s.unitsRidden)}</em></td>
             <td>−${rupees(s.energySpent)}</td></tr>
-        <tr class="out"><td>Wear, data, the rest</td><td>−${rupees(s.expenses - s.energySpent)}</td></tr>
+        ${
+          s.bribesPaid > 0
+            ? `<tr class="out"><td>Handed over at the roadside <em>jumped lights</em></td>
+                 <td>−${rupees(s.bribesPaid)}</td></tr>`
+            : ""
+        }
+        <tr class="out"><td>Wear, data, the rest</td>
+            <td>−${rupees(s.expenses - s.energySpent - s.bribesPaid)}</td></tr>
       </table>
 
       ${

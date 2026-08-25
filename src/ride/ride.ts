@@ -74,7 +74,27 @@ export interface RideState {
   /** Chance a run red goes wrong, and how long a red holds you. */
   signalWaitSeconds: number;
   signalRunCrashChance: number;
+  signalRunStopChance: number;
+  /** Rupees handed over to be waved on. */
+  bribesPaid: number;
+  /** A police stop in progress, waiting on the player to decide. */
+  heldBy: PoliceStop | null;
+  bribe: { min: number; max: number; seconds: number; argueSeconds: number; argueChance: number };
   rand: () => number;
+}
+
+/**
+ * Being pulled over for jumping a red.
+ *
+ * Most jumped reds cost nothing, which is exactly why riders keep jumping them.
+ * When one does not, the outcome is rarely a ticket — it is a negotiation, and
+ * the choice between paying to move and arguing to save the money is the choice
+ * a real rider makes at the side of the road with a delivery clock running.
+ */
+export interface PoliceStop {
+  demanded: number;
+  /** Set once the player picks, so the ride knows to resume. */
+  settled: boolean;
 }
 
 export interface RideResult {
@@ -86,6 +106,8 @@ export interface RideResult {
    */
   pace: number;
   redsRun: number;
+  /** Rupees handed over at the roadside. */
+  bribesPaid: number;
 }
 
 export interface RideOptions {
@@ -98,6 +120,12 @@ export interface RideOptions {
   seed: number;
   signalWaitSeconds: number;
   signalRunCrashChance: number;
+  signalRunStopChance: number;
+  bribeMin: number;
+  bribeMax: number;
+  bribeSeconds: number;
+  argueSeconds: number;
+  argueSuccessChance: number;
 }
 
 const TOP_SPEED = 5200; // world units per second
@@ -164,6 +192,16 @@ export function createRide(opts: RideOptions): RideState {
     waitedSeconds: 0,
     signalWaitSeconds: opts.signalWaitSeconds,
     signalRunCrashChance: opts.signalRunCrashChance,
+    signalRunStopChance: opts.signalRunStopChance,
+    bribesPaid: 0,
+    heldBy: null,
+    bribe: {
+      min: opts.bribeMin,
+      max: opts.bribeMax,
+      seconds: opts.bribeSeconds,
+      argueSeconds: opts.argueSeconds,
+      argueChance: opts.argueSuccessChance,
+    },
     rand,
     z: 0,
     x: 0,
@@ -212,6 +250,12 @@ export function nextSignal(ride: RideState): Signal | null {
  */
 export function stepRide(ride: RideState, input: RideInput, dt: number): void {
   if (ride.done) return;
+
+  // Held at the roadside until the player settles it.
+  if (ride.heldBy && !ride.heldBy.settled) {
+    ride.speed = 0;
+    return;
+  }
 
   ride.elapsed += dt;
 
@@ -352,13 +396,46 @@ function checkSignals(ride: RideState): void {
 
     s.ranIt = true;
     ride.redsRun += 1;
-    if (ride.rand() < ride.signalRunCrashChance) {
+
+    const roll = ride.rand();
+    if (roll < ride.signalRunCrashChance) {
+      // Something came the other way.
       ride.crashes += 1;
       ride.minutesLost += CRASH_MINUTES * 1.6 * (1 + ride.load * 0.6);
       ride.stagger = 0.9;
       ride.speed = 0.16;
+    } else if (roll < ride.signalRunCrashChance + ride.signalRunStopChance) {
+      const span = ride.bribe.max - ride.bribe.min;
+      ride.heldBy = {
+        demanded: Math.round((ride.bribe.min + ride.rand() * span) / 10) * 10,
+        settled: false,
+      };
+      ride.speed = 0;
     }
   }
+}
+
+/** Hand it over and go. Costs money, costs barely any time. */
+export function payBribe(ride: RideState): void {
+  if (!ride.heldBy || ride.heldBy.settled) return;
+  ride.bribesPaid += ride.heldBy.demanded;
+  ride.minutesLost += ride.bribe.seconds / 6;
+  ride.heldBy.settled = true;
+  ride.heldBy = null;
+}
+
+/**
+ * Stand your ground. Usually works and costs only the time, which is the whole
+ * gamble: the time is worth more than the money when a deadline is close.
+ */
+export function argue(ride: RideState): boolean {
+  if (!ride.heldBy || ride.heldBy.settled) return false;
+  const won = ride.rand() < ride.bribe.argueChance;
+  if (!won) ride.bribesPaid += ride.heldBy.demanded;
+  ride.minutesLost += ride.bribe.argueSeconds / 6;
+  ride.heldBy.settled = true;
+  ride.heldBy = null;
+  return won;
 }
 
 export function rideResult(ride: RideState): RideResult {
@@ -371,5 +448,6 @@ export function rideResult(ride: RideState): RideResult {
     minutesLost: Math.round(ride.minutesLost * 10) / 10,
     pace: Math.max(0, Math.min(1, expected / moving)),
     redsRun: ride.redsRun,
+    bribesPaid: ride.bribesPaid,
   };
 }

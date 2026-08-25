@@ -59,10 +59,17 @@ function warnings(state: ShiftState, cfg: GameConfig): string {
   if (vehicle.energy !== "none") {
     const frac = state.rangeLeft / vehicle.rangeKm;
     const stop = nearestRefill(state);
+    const word = vehicle.refillIsWholeUnit ? "swap" : "pump";
     if (stop && stop.km > state.rangeLeft) {
-      out.push(`<span class="warn bad">No ${vehicle.refillIsWholeUnit ? "swap" : "pump"} in range</span>`);
-    } else if (frac <= cfg.lowRangeWarning) {
-      out.push(`<span class="warn">${Math.round(state.rangeLeft)} km of fuel left</span>`);
+      out.push(`<span class="warn bad">Nearest ${word} is ${km(stop.km)} — further than you can ride</span>`);
+    } else if (frac <= cfg.lowRangeWarning && stop) {
+      // Offer the way there rather than only announcing the problem, the way a
+      // navigation app would.
+      out.push(
+        `<button class="warn act" data-go="${esc(stop.nodeId)}">
+           ${Math.round(state.rangeLeft)} km left · ${word} at ${esc(node(stop.nodeId).name)}, ${km(stop.km)} →
+         </button>`,
+      );
     }
   }
 

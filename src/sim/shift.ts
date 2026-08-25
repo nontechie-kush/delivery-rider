@@ -67,6 +67,8 @@ export interface ShiftState {
   rangeLeft: number;
   /** Rupees spent on petrol or swaps so far, paid as you go. */
   energySpent: number;
+  /** Rupees handed over at the roadside for jumped lights. */
+  bribesPaid: number;
   duty: DutyState;
   log: string[];
 }
@@ -89,6 +91,8 @@ export interface ShiftSummary {
   minutesOnline: number;
   /** Rupees paid for petrol or battery swaps during the day. */
   energySpent: number;
+  /** Rupees handed over at the roadside. */
+  bribesPaid: number;
   /** Kilometres of range still in the tank at close. */
   rangeLeft: number;
   /** Accepted over offered, or null if too few offers to judge. */
@@ -127,6 +131,7 @@ export function createShift(
     // Riders start the day with a full tank; topping up mid-shift is the decision.
     rangeLeft: vehicle.rangeKm,
     energySpent: 0,
+    bribesPaid: 0,
     duty: createDuty(),
     log: [],
   };
@@ -457,7 +462,9 @@ export function endShift(state: ShiftState): ShiftSummary {
   // on a swap scooter, and over a 120 km day that gap is the whole argument.
   const vehicle = vehicleOf(state.vehicleId, state.cfg);
   const upkeep = state.unitsRidden * vehicle.upkeepPerKm;
-  const expenses = Math.round(state.cfg.dailyExpenses + upkeep + state.energySpent);
+  const expenses = Math.round(
+    state.cfg.dailyExpenses + upkeep + state.energySpent + state.bribesPaid,
+  );
 
   // A met guarantee is a floor, not a bonus: it tops earnings up to the promised
   // number and pays nothing if you already cleared it. Break any term and it is
@@ -488,6 +495,7 @@ export function endShift(state: ShiftState): ShiftSummary {
     unitsRidden: state.unitsRidden,
     minutesOnline: state.duty.minutesOnline,
     energySpent: state.energySpent,
+    bribesPaid: state.bribesPaid,
     rangeLeft: state.rangeLeft,
     acceptance: acceptanceRate(state.duty, state.cfg),
     incentivesVoided: voided,

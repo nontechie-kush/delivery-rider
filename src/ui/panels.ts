@@ -250,22 +250,19 @@ export function actionBlock(state: ShiftState): string {
   const best = [...stops.entries()].sort((a, b) => a[1] - b[1])[0];
   const vehicle = vehicleOf(state.vehicleId, state.cfg);
 
-  if (canRefill(state)) {
-    const restored = vehicle.rangeKm - state.rangeLeft;
-    const billed = vehicle.refillIsWholeUnit ? vehicle.rangeKm : restored;
-    return `<div class="actionbar">
-      <button class="go" data-refill="1">
-        <span class="golabel">${vehicle.refillIsWholeUnit ? "Swap battery" : "Fill up"}</span>
-        <span class="gometa">${rupees(energyCost(billed, vehicle))} · ${vehicle.refillMinutes} min · back to ${Math.round(vehicle.rangeKm)} km</span>
-      </button>
-      <button class="wait" data-wait="15">Skip</button>
-    </div>`;
-  }
+  // Refuelling is an offer, never a takeover. Standing at a pump mid-delivery
+  // used to replace the whole action bar with "Fill up", which forced a stop on
+  // a rider who was three minutes from a drop. It sits beside the job instead.
+  const topUp = canRefill(state)
+    ? `<button class="wait" data-refill="1">${
+        vehicle.refillIsWholeUnit ? "Swap" : "Fill up"
+      }<em>${vehicle.refillMinutes} min</em></button>`
+    : "";
 
   if (!best) {
     return `<div class="actionbar">
-      <button class="wait wide" data-wait="15">Wait 15 min</button>
-      <button class="wait" data-wait="40">40 min</button>
+      ${topUp || '<button class="wait wide" data-wait="15">Wait 15 min</button>'}
+      <button class="wait" data-wait="${topUp ? 15 : 40}">${topUp ? "Wait" : "40 min"}</button>
     </div>`;
   }
 
@@ -285,7 +282,7 @@ export function actionBlock(state: ShiftState): string {
           : ` · ${rupees(energyCost(distance(state.locationId, id), vehicle))} fuel`
       }</span>
     </button>
-    <button class="wait" data-wait="15">Wait</button>
+    ${topUp || '<button class="wait" data-wait="15">Wait</button>'}
   </div>`;
 }
 

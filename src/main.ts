@@ -225,11 +225,14 @@ async function rideTo(destId: string): Promise<void> {
 
   // Snapshot before arriving, so the outcome beat knows what actually landed.
   const before = state.completed.length;
+  state.bribesPaid += outcome.bribesPaid;
   travelTo(state, destId, outcome.extraMinutes);
   landed = state.completed.slice(before);
   if (outcome.redsRun > 0) {
     state.log.push(
-      `Ran ${outcome.redsRun} red light${outcome.redsRun > 1 ? "s" : ""} getting there.`,
+      outcome.bribesPaid > 0
+        ? `Ran ${outcome.redsRun} red light${outcome.redsRun > 1 ? "s" : ""} and paid ₹${outcome.bribesPaid} to be waved on.`
+        : `Ran ${outcome.redsRun} red light${outcome.redsRun > 1 ? "s" : ""} and got away with it.`,
     );
   }
 

@@ -15,6 +15,8 @@ export interface RideOutcome {
   /** Minutes to add to the journey: spills, plus whatever the pace cost. */
   extraMinutes: number;
   redsRun: number;
+  /** Rupees handed over at the roadside, deducted from the day. */
+  bribesPaid: number;
 }
 
 /**
@@ -40,7 +42,7 @@ export async function launchRide(
   const base = rideMinutes(state, state.locationId, destId);
 
   // No canvas to ride on — never strand the player, just make the journey.
-  if (!stage) return { extraMinutes: 0, redsRun: 0 };
+  if (!stage) return { extraMinutes: 0, redsRun: 0, bribesPaid: 0 };
 
   const seconds = Math.max(
     cfg.rideSecondsMin,
@@ -59,6 +61,12 @@ export async function launchRide(
       seed: Math.floor(Math.random() * 1e9),
       signalWaitSeconds: cfg.signalWaitSeconds,
       signalRunCrashChance: cfg.signalRunCrashChance,
+      signalRunStopChance: cfg.signalRunStopChance,
+      bribeMin: cfg.bribeMin,
+      bribeMax: cfg.bribeMax,
+      bribeSeconds: cfg.bribeSeconds,
+      argueSeconds: cfg.argueSeconds,
+      argueSuccessChance: cfg.argueSuccessChance,
     },
     {
       to: node(destId).name,
@@ -81,5 +89,6 @@ export async function launchRide(
   return {
     extraMinutes: result.minutesLost + base * (paceFactor - 1),
     redsRun: result.redsRun,
+    bribesPaid: result.bribesPaid,
   };
 }

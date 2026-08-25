@@ -13,8 +13,10 @@ import {
 } from "./road.js";
 import { drawPlayerBike, drawVehicle } from "./sprites.js";
 import {
+  argue,
   createRide,
   nextSignal,
+  payBribe,
   rideResult,
   signalIsRed,
   stepRide,
@@ -90,6 +92,16 @@ export function runRide(
         <button class="rc right" data-steer="1" aria-label="Right"></button>
       </div>
       <div class="ridehint">Hold GO. Steer with the arrows. Traffic hurts.</div>
+      <div class="police" hidden>
+        <div class="pol-card">
+          <b>Pulled over</b>
+          <p>You jumped the light. He wants <span class="pol-amt"></span> to forget it.</p>
+          <div class="pol-acts">
+            <button class="pol-pay" data-bribe="1">Pay <span class="pol-amt2"></span><em>6 sec</em></button>
+            <button class="pol-argue" data-argue="1">Argue<em>~22 sec, might cost nothing</em></button>
+          </div>
+        </div>
+      </div>
     </div>`;
 
   const canvas = host.querySelector<HTMLCanvasElement>(".ridecanvas")!;
@@ -99,6 +111,7 @@ export function runRide(
   const etaOut = host.querySelector<HTMLElement>(".rs-eta")!;
   const stats = host.querySelector<HTMLElement>(".ridestats")!;
   const lightBox = host.querySelector<HTMLElement>(".ridelight")!;
+  const police = host.querySelector<HTMLElement>(".police")!;
   const lightText = host.querySelector<HTMLElement>(".ridelight span")!;
   const ctx = canvas.getContext("2d")!;
 
@@ -108,6 +121,16 @@ export function runRide(
   const syncSteer = (): void => {
     input.steer = (held.has("1") ? 1 : 0) - (held.has("-1") ? 1 : 0);
   };
+
+  // The roadside negotiation, which pauses everything until it is settled.
+  const onSettle = (event: Event): void => {
+    const el = (event.target as Element)?.closest<HTMLElement>("[data-bribe],[data-argue]");
+    if (!el) return;
+    event.preventDefault();
+    if (el.dataset["bribe"]) payBribe(ride);
+    else argue(ride);
+  };
+  host.addEventListener("click", onSettle);
 
   const onDown = (event: PointerEvent): void => {
     const el = (event.target as Element)?.closest<HTMLElement>("[data-steer],[data-gas]");
@@ -155,6 +178,7 @@ export function runRide(
   const teardown = (): void => {
     cancelAnimationFrame(raf);
     host.removeEventListener("pointerdown", onDown);
+    host.removeEventListener("click", onSettle);
     window.removeEventListener("pointerup", onUp);
     window.removeEventListener("pointercancel", onUp);
     window.removeEventListener("keydown", keyDown);
@@ -187,6 +211,15 @@ export function runRide(
       const willBeLate = label.slackMinutes !== null && eta > label.slackMinutes;
       stats.className = `ridestats ${willBeLate ? "late" : ""}`;
 
+      if (ride.heldBy) {
+        police.hidden = false;
+        for (const el of police.querySelectorAll(".pol-amt, .pol-amt2")) {
+          el.textContent = `₹${ride.heldBy.demanded}`;
+        }
+      } else {
+        police.hidden = true;
+      }
+
       // Warn about the next light only once it is close enough to act on.
       const ahead = nextSignal(ride);
       const near = ahead !== null && ahead.z - ride.z < 7000;
@@ -194,8 +227,15 @@ export function runRide(
       lightBox.hidden = !near && ride.waiting <= 0;
       if (!lightBox.hidden) {
         lightBox.className = `ridelight ${ride.waiting > 0 ? "held" : red ? "red" : "green"}`;
+        // Distance to it, because "red ahead" without a distance is not
+        // something a rider can act on.
+        const away = ahead ? Math.max(0, Math.round((ahead.z - ride.z) / 55)) : 0;
         lightText.textContent =
-          ride.waiting > 0 ? "Waiting" : red ? "Red ahead" : "Green";
+          ride.waiting > 0
+            ? "Waiting for green"
+            : red
+              ? `Red · ${away} m`
+              : `Green · ${away} m`;
       }
 
       if (ride.done || cancelled) {
@@ -323,7 +363,14 @@ function drawSegment(ctx: CanvasRenderingContext2D, width: number, seg: Segment)
   }
 }
 
-/** A gantry over the road with a light on it, visible from far enough to react. */
+/**
+ * The signal, made impossible to miss.
+ *
+ * It used to be a small lamp on a thin bar, dead centre — the one place a truck
+ * is most likely to be. Now the whole gantry carries the colour, a wash lies
+ * across the tarmac approaching a red, and the stop line is drawn wide, so the
+ * state is readable from the shape of the road rather than from one dot.
+ */
 function drawSignals(
   ctx: CanvasRenderingContext2D,
   canvas: HTMLCanvasElement,
@@ -338,7 +385,7 @@ function drawSignals(
   };
 
   const visible = ride.signals
-    .filter((s) => s.z > ride.z - 400 && s.z < ride.z + 46000)
+    .filter((s) => s.z > ride.z - 400 && s.z < ride.z + 52000)
     .sort((a, b) => b.z - a.z);
 
   for (const s of visible) {
@@ -349,28 +396,43 @@ function drawSignals(
     if (probe.screen.w <= 1) continue;
 
     const red = signalIsRed(s, ride.elapsed);
-    const barY = probe.screen.y - probe.screen.w * 0.62;
-    const barH = Math.max(1, probe.screen.w * 0.05);
+    const colour = red ? "#ff3b22" : "#2fd97f";
+    const wide = probe.screen.w;
 
-    // The gantry, then the stop line on the tarmac.
-    ctx.fillStyle = "#1b211d";
-    ctx.fillRect(probe.screen.x - probe.screen.w, barY, probe.screen.w * 2, barH);
-
-    ctx.fillStyle = red ? "#ff4a35" : "#38e08a";
-    const lampR = Math.max(1, probe.screen.w * 0.055);
-    ctx.beginPath();
-    ctx.arc(probe.screen.x, barY + barH + lampR, lampR, 0, Math.PI * 2);
-    ctx.fill();
-
+    // A wash over the tarmac ahead of a red, so the road itself carries the
+    // warning rather than a lamp that a truck can stand in front of.
     if (red) {
-      ctx.fillStyle = "rgba(255,255,255,0.75)";
-      ctx.fillRect(
-        probe.screen.x - probe.screen.w,
-        probe.screen.y - probe.screen.w * 0.02,
-        probe.screen.w * 2,
-        Math.max(1, probe.screen.w * 0.035),
-      );
+      const fade = Math.max(0, Math.min(0.3, (18000 - (s.z - ride.z)) / 90000));
+      if (fade > 0) {
+        ctx.fillStyle = `rgba(255,59,34,${fade.toFixed(3)})`;
+        ctx.fillRect(probe.screen.x - wide, probe.screen.y - wide * 0.1, wide * 2, h - probe.screen.y);
+      }
     }
+
+    // The stop line, full road width.
+    ctx.fillStyle = red ? "rgba(255,255,255,0.85)" : "rgba(255,255,255,0.28)";
+    ctx.fillRect(probe.screen.x - wide, probe.screen.y - wide * 0.03, wide * 2, Math.max(2, wide * 0.055));
+
+    // Uprights and the beam, all in the signal's colour.
+    const postH = wide * 0.95;
+    const postW = Math.max(2, wide * 0.07);
+    ctx.fillStyle = "#141917";
+    ctx.fillRect(probe.screen.x - wide - postW, probe.screen.y - postH, postW, postH);
+    ctx.fillRect(probe.screen.x + wide, probe.screen.y - postH, postW, postH);
+
+    const beamH = Math.max(3, wide * 0.16);
+    ctx.fillStyle = colour;
+    ctx.fillRect(probe.screen.x - wide - postW, probe.screen.y - postH, wide * 2 + postW * 2, beamH);
+
+    // A glow so it reads at distance, where the bar is only a few pixels tall.
+    ctx.globalAlpha = 0.35;
+    ctx.fillRect(
+      probe.screen.x - wide - postW,
+      probe.screen.y - postH - beamH,
+      wide * 2 + postW * 2,
+      beamH * 3,
+    );
+    ctx.globalAlpha = 1;
   }
 }
 
