@@ -378,3 +378,63 @@ describe("vehicle sprites", () => {
     );
   });
 });
+
+describe("traffic obeys the lights", () => {
+  /**
+   * It did not, which made every red a tax on the player alone while the cars
+   * sailed through. Unfair to play against and wrong to look at.
+   */
+  it("holds moving traffic behind a red", () => {
+    const ride = makeRide({ seconds: 40, density: 1, seed: 31 });
+    // A signal far enough ahead that traffic has room to reach it.
+    const light = ride.signals[0];
+    if (!light) return;
+
+    // Wind the clock to a moment the light is red.
+    let guard = 0;
+    while (!signalIsRed(light, ride.elapsed) && guard++ < 4000) {
+      stepRide(ride, COAST, 1 / 60);
+    }
+    if (!signalIsRed(light, ride.elapsed)) return;
+
+    const past = ride.hazards.filter((h) => h.speed > 0 && h.z > light.z + 400).length;
+    for (let i = 0; i < 120; i++) stepRide(ride, COAST, 1 / 60);
+
+    // Nothing that was behind the line should have crossed while it stayed red.
+    if (signalIsRed(light, ride.elapsed)) {
+      const nowPast = ride.hazards.filter((h) => h.speed > 0 && h.z > light.z + 400).length;
+      expect(nowPast).toBe(past);
+    }
+  });
+
+  it("stacks a queue rather than piling vehicles on one spot", () => {
+    const ride = makeRide({ seconds: 40, density: 1, seed: 17 });
+    for (let i = 0; i < 900; i++) stepRide(ride, COAST, 1 / 60);
+
+    for (const light of ride.signals) {
+      if (!signalIsRed(light, ride.elapsed)) continue;
+      const queue = ride.hazards
+        .filter((h) => h.speed > 0 && h.z < light.z && h.z > light.z - 6000)
+        .map((h) => h.z)
+        .sort((a, b) => a - b);
+
+      // No two queued vehicles may occupy the same metre of road.
+      for (let i = 1; i < queue.length; i++) {
+        expect(queue[i]! - queue[i - 1]!).toBeGreaterThan(1);
+      }
+    }
+  });
+
+  it("lets traffic move again once the light clears", () => {
+    const ride = makeRide({ seconds: 40, density: 1, seed: 23 });
+    const moving = () => ride.hazards.filter((h) => h.speed > 0).map((h) => h.z);
+
+    const before = moving();
+    for (let i = 0; i < 1800; i++) stepRide(ride, COAST, 1 / 60);
+    const after = moving();
+
+    // Over thirty seconds every light cycles, so traffic must have advanced.
+    const advanced = after.filter((z, i) => z > (before[i] ?? 0)).length;
+    expect(advanced).toBeGreaterThan(0);
+  });
+});

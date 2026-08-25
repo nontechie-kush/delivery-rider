@@ -251,15 +251,67 @@ export function stepRide(ride: RideState, input: RideInput, dt: number): void {
 
   ride.z += TOP_SPEED * ride.speed * dt;
 
-  // Traffic moves too, which is why the gaps close.
-  for (const h of ride.hazards) {
-    if (h.speed > 0) h.z += TOP_SPEED * h.speed * dt;
-  }
+  moveTraffic(ride, dt);
 
   if (!staggered) checkCollisions(ride);
   checkSignals(ride);
 
   if (ride.z >= ride.finishZ) ride.done = true;
+}
+
+/** Metres of road a queued vehicle occupies, nose to nose. */
+const QUEUE_GAP = 620;
+/** How far back a vehicle starts braking for a red. */
+const BRAKING_ZONE = 9000;
+
+/**
+ * Traffic obeys the lights too.
+ *
+ * It did not, which made every red a tax on the player alone while the cars
+ * sailed through — unfair to play against and wrong to look at. Now vehicles
+ * queue at the stop line, nose to tail.
+ *
+ * The consequence is the thing worth having: a red light becomes a stationary
+ * queue with gaps between the lanes, and filtering to the front of it is the
+ * single most recognisable thing about riding a two-wheeler in an Indian city.
+ * The light stops being a pure penalty and starts being a skill.
+ */
+function moveTraffic(ride: RideState, dt: number): void {
+  // Where each red light is holding its queue, and how long that queue is.
+  const queues = new Map<Signal, number>();
+
+  for (const h of ride.hazards) {
+    if (h.speed <= 0) continue;
+
+    const light = redAhead(ride, h.z);
+    if (!light) {
+      h.z += TOP_SPEED * h.speed * dt;
+      continue;
+    }
+
+    const queued = queues.get(light) ?? 0;
+    const stopAt = light.z - 260 - queued * QUEUE_GAP;
+
+    // Only vehicles close enough to see it are braking for it.
+    if (h.z < stopAt - BRAKING_ZONE) {
+      h.z += TOP_SPEED * h.speed * dt;
+      continue;
+    }
+
+    h.z = Math.min(h.z + TOP_SPEED * h.speed * dt, stopAt);
+    queues.set(light, queued + 1);
+  }
+}
+
+/** The nearest signal ahead of a point that is showing red right now. */
+function redAhead(ride: RideState, z: number): Signal | null {
+  let best: Signal | null = null;
+  for (const s of ride.signals) {
+    if (s.z <= z) continue;
+    if (!signalIsRed(s, ride.elapsed)) continue;
+    if (!best || s.z < best.z) best = s;
+  }
+  return best;
 }
 
 function checkCollisions(ride: RideState): void {
