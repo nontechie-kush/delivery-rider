@@ -21,6 +21,7 @@ import {
   rideResult,
   signalIsRed,
   stepRide,
+  TOP_SPEED,
   type RideOptions,
   type RideResult,
   type RideState,
@@ -114,11 +115,15 @@ export function runRide(
       </div>
       <div class="ridestats">
         <div class="rs"><b class="rs-km">${label.km.toFixed(1)}</b><span>km to go</span></div>
-        <div class="rs"><b class="rs-eta">${Math.round(label.etaMinutes)}</b><span>min out</span></div>
+        ${
+          label.slackMinutes === null
+            ? ""
+            : `<div class="rs"><b class="rs-left">${Math.round(label.slackMinutes)}</b><span>min left</span></div>`
+        }
       </div>
       <div class="ridespeed"><b>0</b><span>km/h</span></div>
       <div class="ridelight" hidden><i></i><span></span></div>
-      <div class="ridemeter"><i></i></div>
+      <div class="ridemeter"><i></i>${label.slackMinutes === null ? "" : '<u class="ghost"></u>'}</div>
       <div class="ridecontrols">
         <div class="rc-row minor">
           <button class="rc small horn" data-horn="1" aria-label="Horn">HORN</button>
@@ -153,10 +158,12 @@ export function runRide(
 
   const wrap = host.querySelector<HTMLElement>(".ridewrap")!;
   const canvas = host.querySelector<HTMLCanvasElement>(".ridecanvas")!;
+  const meterBox = host.querySelector<HTMLElement>(".ridemeter")!;
   const meter = host.querySelector<HTMLElement>(".ridemeter i")!;
   const speedo = host.querySelector<HTMLElement>(".ridespeed b")!;
   const kmLeft = host.querySelector<HTMLElement>(".rs-km")!;
-  const etaOut = host.querySelector<HTMLElement>(".rs-eta")!;
+  const timeLeft = host.querySelector<HTMLElement>(".rs-left");
+  const ghost = host.querySelector<HTMLElement>(".ridemeter .ghost");
   const stats = host.querySelector<HTMLElement>(".ridestats")!;
   const lightBox = host.querySelector<HTMLElement>(".ridelight")!;
   const police = host.querySelector<HTMLElement>(".police")!;
@@ -255,6 +262,8 @@ export function runRide(
   let raf = 0;
   let last = performance.now();
   // Sound follows changes in the sim, so these track what was true last frame.
+  // Never allowed to fall: a clock that goes backwards is the thing being fixed.
+  let spent = 0;
   let heardCrashes = 0;
   let heardLanded = 0;
   let heardWeapon = ride.combat.weapon;
@@ -304,13 +313,31 @@ export function runRide(
       const remainingKm = label.km * (1 - progress);
       kmLeft.textContent = remainingKm.toFixed(1);
 
-      const held = Math.max(0.25, ride.speed);
-      const eta = label.etaMinutes * (1 - progress) * (1 / Math.max(0.6, held));
-      etaOut.textContent = String(Math.max(0, Math.round(eta)));
+      // Game-minutes spent so far. The old readout divided the estimate by
+      // current speed, which clamped at 0.6 — so standstill, crawling and half
+      // throttle all displayed the same number and it then snapped by a third
+      // the instant the throttle went down. It also swung 67% where the sim
+      // charges 33%, telling the player throttle mattered twice as much as it
+      // does.
+      //
+      // A clock is a clock: this only ever counts up, at the rate real time is
+      // passing, and crashes take a visible bite out of it. Throttle earns you
+      // distance, not minutes — which is the deal Crazy Taxi and OutRun made.
+      spent = Math.max(spent, spentMinutes(ride, label.etaMinutes));
 
-      // Red when the projection says this one is not going to make it.
-      const willBeLate = label.slackMinutes !== null && eta > label.slackMinutes;
-      stats.className = `ridestats ${willBeLate ? "late" : ""}`;
+      if (timeLeft && ghost && label.slackMinutes !== null) {
+        const left = label.slackMinutes - spent;
+        timeLeft.textContent = String(Math.max(0, Math.round(left)));
+
+        // The ghost is the share of the time budget already gone, against the
+        // share of the journey already done. Ahead of it means arriving early.
+        // No arithmetic for the player, and nothing that can jump.
+        const burned = Math.min(1, spent / Math.max(0.5, label.slackMinutes));
+        ghost.style.left = `${burned * 100}%`;
+        const behind = burned > progress;
+        stats.className = `ridestats ${behind ? "late" : ""}`;
+        meterBox.className = `ridemeter ${behind ? "behind" : "ahead"}`;
+      }
 
       hitLabel.textContent = ride.combat.weapon === "none" ? "KICK" : ride.combat.weapon.toUpperCase();
 
@@ -363,6 +390,18 @@ export function runRide(
       },
     },
   };
+}
+
+/**
+ * Game-minutes the ride has cost so far.
+ *
+ * Linear in elapsed real time, plus whatever crashes and stops have added.
+ * Deliberately not a function of current speed: speed decides how much road
+ * gets covered per minute, and the minutes themselves pass regardless.
+ */
+export function spentMinutes(ride: RideState, etaMinutes: number): number {
+  const expected = ride.finishZ / TOP_SPEED;
+  return etaMinutes * (ride.elapsed / Math.max(0.001, expected)) + ride.minutesLost;
 }
 
 function resize(canvas: HTMLCanvasElement): void {

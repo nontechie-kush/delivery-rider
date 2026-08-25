@@ -206,7 +206,8 @@ export interface RideOptions {
   night: boolean;
 }
 
-const TOP_SPEED = 5200; // world units per second
+/** World units per second at full throttle. */
+export const TOP_SPEED = 5200;
 const ACCEL = 2.4;
 const BRAKE = 4.2;
 const DRAG = 1.1;

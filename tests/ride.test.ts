@@ -11,6 +11,7 @@ import {
   type RideInput,
 } from "../src/ride/ride.js";
 import { drawPlayerBike, drawVehicle } from "../src/ride/sprites.js";
+import { spentMinutes } from "../src/ride/screen.js";
 import {
   CAMERA_HEIGHT,
   buildRoad,
@@ -806,5 +807,60 @@ describe("the end of a shift", () => {
       return r.x;
     };
     expect(drift(spent)).toBeLessThan(drift(fresh));
+  });
+});
+
+
+/**
+ * The ride clock.
+ *
+ * The old readout was `eta / max(0.6, speed)`, which meant standstill, crawling
+ * and half throttle all printed the same number and it then dropped by a third
+ * the instant the throttle went down. It also swung 67% across the throttle
+ * range while the sim only ever charges 33%.
+ */
+describe("the ride clock", () => {
+  const ETA = 10;
+
+  it("does not move when the throttle does", () => {
+    const ride = makeRide({ seconds: 20, pressure: 0, load: 0.3, seed: 5 });
+    const coast: RideInput = { steer: 0, throttle: false, brake: false };
+
+    for (let i = 0; i < 60; i++) stepRide(ride, coast, 1 / 60);
+    const before = spentMinutes(ride, ETA);
+
+    // One frame, throttle down. The old readout jumped by minutes here.
+    stepRide(ride, FLAT_OUT, 1 / 60);
+    const after = spentMinutes(ride, ETA);
+
+    expect(after - before).toBeLessThan(0.05);
+  });
+
+  it("only ever counts up", () => {
+    const ride = makeRide({ seconds: 20, pressure: 1, load: 0.5, seed: 12 });
+    let previous = 0;
+
+    for (let i = 0; i < 2000 && !ride.done; i++) {
+      stepRide(ride, { steer: Math.sin(i / 25) > 0 ? 1 : -1, throttle: i % 90 < 70, brake: false }, 1 / 60);
+      const now = spentMinutes(ride, ETA);
+      expect(now).toBeGreaterThanOrEqual(previous - 1e-9);
+      previous = now;
+    }
+  });
+
+  it("charges the same minutes for the same time, whatever the speed", () => {
+    // Throttle buys distance, not minutes. Two riders who spend the same real
+    // seconds have spent the same clock, and the fast one is simply further on.
+    const fast = makeRide({ seconds: 20, pressure: 0, load: 0, seed: 4 });
+    const slow = makeRide({ seconds: 20, pressure: 0, load: 0, seed: 4 });
+    const coast: RideInput = { steer: 0, throttle: false, brake: false };
+
+    for (let i = 0; i < 300; i++) {
+      stepRide(fast, FLAT_OUT, 1 / 60);
+      stepRide(slow, coast, 1 / 60);
+    }
+
+    expect(spentMinutes(fast, ETA)).toBeCloseTo(spentMinutes(slow, ETA), 1);
+    expect(fast.z).toBeGreaterThan(slow.z * 2);
   });
 });

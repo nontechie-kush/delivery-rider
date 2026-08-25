@@ -98,7 +98,7 @@ describe("the stylesheet", () => {
   it("styles every class the markup asks for", () => {
     const styled = new Set([...css.matchAll(/\.([a-zA-Z][\w-]*)/g)].map((m) => m[1]!));
     // SVG grouping elements are structural hooks with nothing to style.
-    const structural = new Set(["roads", "legs", "nodes", "heatmap", "rs-km", "rs-eta"]);
+    const structural = new Set(["roads", "legs", "nodes", "heatmap", "rs-km", "rs-left"]);
 
     const orphans = [...classesInMarkup()].filter(
       (c) => !styled.has(c) && !structural.has(c),

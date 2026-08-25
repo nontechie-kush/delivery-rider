@@ -385,8 +385,30 @@ button:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 .ridedest b { display: block; font-size: 18px; font-weight: 700; letter-spacing: -0.02em; }
 .ridebag { font-size: 12px; color: rgba(255, 255, 255, 0.65); background: rgba(6, 10, 12, 0.6); padding: 5px 10px; border-radius: 12px; }
 
-.ridemeter { position: absolute; top: 0; left: 0; right: 0; height: 3px; background: rgba(255, 255, 255, 0.12); }
-.ridemeter i { display: block; height: 100%; background: var(--brand); }
+/* The journey bar, with a pace ghost on it.
+   The fill is how much road is behind you; the ghost is how much of the time
+   budget is gone. Ahead of the ghost means arriving early, and it reads without
+   any arithmetic — which is the entire reason the arrival estimate went away. */
+.ridemeter {
+  position: absolute; top: 0; left: 0; right: 0; height: 6px;
+  background: rgba(255, 255, 255, 0.12);
+}
+.ridemeter i {
+  display: block; height: 100%; background: var(--brand);
+  transition: background 0.25s ease;
+}
+.ridemeter.behind i { background: var(--red); }
+.ridemeter .ghost {
+  position: absolute; top: -3px; width: 2px; height: 12px;
+  background: #fff; border-radius: 1px;
+  box-shadow: 0 0 6px rgba(0, 0, 0, 0.8);
+  transform: translateX(-1px);
+}
+.ridemeter .ghost::after {
+  content: ""; position: absolute; top: -4px; left: -3px;
+  border-left: 4px solid transparent; border-right: 4px solid transparent;
+  border-top: 5px solid #fff;
+}
 
 .ridestats { position: absolute; left: 16px; top: 78px; display: flex; gap: 18px; pointer-events: none; }
 .rs b { display: block; font-size: 22px; font-weight: 700; letter-spacing: -0.02em; line-height: 1; font-variant-numeric: tabular-nums; }
