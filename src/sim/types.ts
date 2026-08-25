@@ -8,6 +8,30 @@ export type Tier = "EXPRESS" | "STANDARD" | "SCHEDULED";
 
 export type NodeKind = "PICKUP" | "DROP";
 
+/**
+ * What sort of place this is, which is what makes a city of this size
+ * learnable. Twenty-odd venues cannot each be memorised, but eight archetypes
+ * can — a dark store is always quick, a biryani house is never quick, a cloud
+ * kitchen is the one you cannot predict. The specific venue then varies around
+ * its type rather than being its own separate fact.
+ */
+export type VenueKind =
+  | "darkstore"
+  | "grocery"
+  | "biryani"
+  | "dhaba"
+  | "cafe"
+  | "sweets"
+  | "chinese"
+  | "fastfood";
+
+/**
+ * What a delivery address is like to hand over at. The whole cost of a drop is
+ * how long the building takes to let you in, so the type predicts it: a metro
+ * gate is a pavement handover, a gated tower is a guard, a lift and a floor.
+ */
+export type AddressKind = "metro" | "market" | "condo" | "gated" | "office";
+
 export interface CityNode {
   id: string;
   name: string;
@@ -21,6 +45,12 @@ export interface CityNode {
 
 export interface Pickup extends CityNode {
   kind: "PICKUP";
+  venue: VenueKind;
+}
+
+export interface Drop extends CityNode {
+  kind: "DROP";
+  address: AddressKind;
 }
 
 export interface Order {

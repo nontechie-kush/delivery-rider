@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { distance } from "../src/sim/city.js";
-import { DEFAULT_CONFIG as E } from "../src/sim/config.js";
+import { BOUNDS, DROPS, NODES, PICKUPS, distance, insideZone } from "../src/sim/city.js";
+import { DEFAULT_CONFIG, DEFAULT_CONFIG as E, placeOf } from "../src/sim/config.js";
+import { venueGlyphs } from "../src/ui/icons.js";
 import { generateOrder } from "../src/sim/orders.js";
 import { makeRng } from "../src/sim/rng.js";
 
@@ -90,5 +91,85 @@ describe("generateOrder", () => {
   it("produces all three tiers over a large sample", () => {
     const tiers = new Set(sample(300).map((o) => o.tier));
     expect(tiers).toEqual(new Set(["EXPRESS", "STANDARD", "SCHEDULED"]));
+  });
+});
+
+/**
+ * The city, once it stopped being four kitchens.
+ *
+ * Twenty-two venues are only an improvement if they stay learnable, and that
+ * rests entirely on the archetype predicting behaviour. If a venue's prep time
+ * stops being readable from its type, the extra places are noise.
+ */
+describe("the venue archetypes", () => {
+  it("gives every pickup a type and every drop an address", () => {
+    for (const p of PICKUPS) expect(DEFAULT_CONFIG.venues[p.venue]).toBeDefined();
+    for (const d of DROPS) expect(DEFAULT_CONFIG.addresses[d.address]).toBeDefined();
+  });
+
+  it("uses every archetype at least once", () => {
+    // An archetype nobody uses is a tuning knob with nothing on the end of it.
+    const used = new Set(PICKUPS.map((p) => p.venue));
+    for (const kind of Object.keys(DEFAULT_CONFIG.venues)) {
+      expect(used).toContain(kind);
+    }
+  });
+
+  it("resolves a venue's behaviour from its type", () => {
+    const cafe = PICKUPS.find((p) => p.venue === "cafe" && p.id !== "hp");
+    expect(cafe).toBeDefined();
+    expect(placeOf(cafe!.id, DEFAULT_CONFIG)).toEqual(DEFAULT_CONFIG.venues.cafe);
+  });
+
+  it("lets a specific address override its type", () => {
+    // Cyber Hub kitchens queue in a way no other dhaba has to.
+    const dhaba = DEFAULT_CONFIG.venues.dhaba;
+    expect(placeOf("hp", DEFAULT_CONFIG).prepMean).toBeGreaterThan(dhaba.prepMean);
+  });
+
+  it("keeps a dark store quick and a biryani house slow", () => {
+    // The spine of the whole knowledge mechanic. If this inverts, the player
+    // has nothing to learn.
+    expect(DEFAULT_CONFIG.venues.darkstore.prepMean).toBeLessThan(5);
+    expect(DEFAULT_CONFIG.venues.biryani.prepMean).toBeGreaterThan(18);
+    expect(DEFAULT_CONFIG.venues.biryani.prepSpread).toBeGreaterThan(
+      DEFAULT_CONFIG.venues.darkstore.prepSpread,
+    );
+  });
+
+  it("charges more to hand over at a gated tower than at a metro gate", () => {
+    expect(DEFAULT_CONFIG.addresses.gated.handover).toBeGreaterThan(
+      DEFAULT_CONFIG.addresses.metro.handover,
+    );
+  });
+
+  it("gives every node a unique id", () => {
+    const ids = NODES.map((n) => n.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  /**
+   * One rider's patch, not all of Gurgaon. Real riders work a radius they can
+   * cross in twenty minutes; a zone that sprawls turns every batch into a
+   * cross-town haul and the routing decision stops being interesting.
+   */
+  it("stays the size of a sector a rider could actually work", () => {
+    const width = BOUNDS.maxX - BOUNDS.minX;
+    const height = BOUNDS.maxY - BOUNDS.minY;
+    expect(width).toBeLessThan(10);
+    expect(height).toBeLessThan(11);
+  });
+
+  it("puts the venues where the zone actually is", () => {
+    // insideZone takes real coordinates, so this checks the projection and the
+    // bounds agree rather than checking bounds against themselves.
+    expect(insideZone(28.467, 77.068)).toBe(true);
+    expect(insideZone(28.6139, 77.209)).toBe(false);
+  });
+
+  it("gives a glyph to every archetype", () => {
+    for (const kind of Object.keys(DEFAULT_CONFIG.venues)) {
+      expect(venueGlyphs[kind as keyof typeof venueGlyphs]).toBeTruthy();
+    }
   });
 });

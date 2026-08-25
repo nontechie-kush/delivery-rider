@@ -1,4 +1,5 @@
 import { BOUNDS, NODES, PICKUPS, ROADS, node } from "../sim/city.js";
+import { venueGlyphs } from "./icons.js";
 import { demandAt } from "../sim/config.js";
 import type { ShiftState } from "../sim/shift.js";
 import { esc, urgency } from "./format.js";
@@ -152,6 +153,15 @@ export function renderMap(
               <circle class="pip" cx="${n.x.toFixed(2)}" cy="${n.y.toFixed(2)}" r="${
                 n.id === state.locationId ? 0.34 : 0.24
               }" />
+              ${
+                // A glyph per archetype, so twenty-two pickups can be told
+                // apart at a glance instead of by reading every label.
+                n.kind === "PICKUP" && !label
+                  ? `<g class="glyph" transform="translate(${n.x.toFixed(2)} ${n.y.toFixed(2)}) scale(0.62)">${
+                      venueGlyphs[n.venue]
+                    }</g>`
+                  : ""
+              }
               ${label ? `<text class="badge" x="${n.x.toFixed(2)}" y="${(n.y + 0.13).toFixed(2)}">${label}</text>` : ""}
               ${labels.get(n.id) ?? ""}
             </g>`;

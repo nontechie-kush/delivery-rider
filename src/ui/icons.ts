@@ -1,3 +1,5 @@
+import type { VenueKind } from "../sim/types.js";
+
 /**
  * Inline SVG icons.
  *
@@ -53,6 +55,49 @@ export const icons = {
 
   /** Money in general — a rupee, since that is the currency. */
   rupee: svg('<path d="M5 3h6" /><path d="M5 6.2h6" /><path d="M10.2 3c0 2.4-1.6 3.2-3.4 3.2H5l5.4 6.8" />'),
+};
+
+/**
+ * Venue archetypes, drawn as glyphs for the map.
+ *
+ * Twenty-two pins that all look the same are twenty-two pins you have to read
+ * the label of. A shape per archetype means the map can be scanned rather than
+ * read — the cluster of coffee cups is Galleria, the handi is a wait.
+ *
+ * Sized for a 1-unit box in the map's kilometre grid and drawn around the
+ * origin, so a caller only has to translate them into place.
+ */
+export const venueGlyphs: Record<VenueKind, string> = {
+  // A basket: goods off a shelf.
+  darkstore:
+    '<path d="M-.3-.06h.6l-.09.34a.1.1 0 0 1-.1.08h-.22a.1.1 0 0 1-.1-.08z" />' +
+    '<path d="M-.17-.06l.07-.16M.17-.06l-.07-.16" />',
+  // A shopping bag with handles.
+  grocery:
+    '<path d="M-.26-.1h.52l-.05.4h-.42z" /><path d="M-.12-.1v-.1a.12.12 0 0 1 .24 0v.1" />',
+  // A sealed handi, lid and all. The slowest thing on the map.
+  biryani:
+    '<path d="M-.28 0h.56a.28.28 0 0 1-.28.3A.28.28 0 0 1-.28 0z" />' +
+    '<path d="M-.32-.04h.64" /><path d="M0-.12v-.14" />',
+  // A tawa with a handle.
+  dhaba:
+    '<path d="M-.26.02a.26.26 0 0 0 .52 0z" /><path d="M.26.02h.12" />' +
+    '<path d="M-.1-.14c0-.08.2-.08.2-.16" />',
+  // A cup and saucer.
+  cafe:
+    '<path d="M-.2-.14h.34v.24a.17.17 0 0 1-.34 0z" />' +
+    '<path d="M.14-.08h.1a.08.08 0 0 1 0 .16h-.1" /><path d="M-.28.16h.5" />',
+  // A laddoo on a plate.
+  sweets:
+    '<circle cx="0" cy="-.04" r=".17" /><path d="M-.26.16h.52" />',
+  // A steamer basket of momos.
+  chinese:
+    '<path d="M-.26.04h.52" /><path d="M-.2.04a.2.2 0 0 1 .4 0" />' +
+    '<path d="M-.28.16h.56" />',
+  // A burger, stacked.
+  fastfood:
+    '<path d="M-.26-.04a.26.2 0 0 1 .52 0z" /><path d="M-.26.06h.52" />' +
+    '<path d="M-.24.16h.48" />',
 };
 
 /** An icon with a label beside it, so the pairing is consistent everywhere. */

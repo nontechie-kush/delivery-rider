@@ -53,17 +53,24 @@ describe("paidFee", () => {
   });
 });
 
+// Read off the config rather than written in. These tests are about the shape
+// of the payout, not about where this month's thresholds happen to sit, and
+// hardcoding them meant a deliberate rebalance broke tests that had no opinion
+// about the numbers.
+const TIERS = E.milestones;
+
 describe("milestoneBonus", () => {
   it("pays nothing below the first threshold", () => {
     expect(milestoneBonus(0, E)).toBe(0);
-    expect(milestoneBonus(11, E)).toBe(0);
+    expect(milestoneBonus(TIERS[0]!.orders - 1, E)).toBe(0);
   });
 
   it("is a step function, not a slope", () => {
-    // The whole design rests on this: order 12 is worth 150 more than order 11.
-    expect(milestoneBonus(12, E) - milestoneBonus(11, E)).toBe(150);
-    expect(milestoneBonus(20, E) - milestoneBonus(19, E)).toBe(350);
-    expect(milestoneBonus(28, E) - milestoneBonus(27, E)).toBe(600);
+    // The whole design rests on this: the order that clears a tier is worth the
+    // entire bonus, and the one below it is worth nothing.
+    for (const tier of TIERS) {
+      expect(milestoneBonus(tier.orders, E) - milestoneBonus(tier.orders - 1, E)).toBe(tier.bonus);
+    }
   });
 
   it("accumulates across thresholds", () => {
@@ -75,11 +82,14 @@ describe("milestoneBonus", () => {
 
 describe("nextMilestone", () => {
   it("reports how many orders short the player is", () => {
-    expect(nextMilestone(0, E)).toEqual({ orders: 12, bonus: 150, short: 12 });
-    expect(nextMilestone(19, E)).toEqual({ orders: 20, bonus: 350, short: 1 });
+    const first = TIERS[0]!;
+    expect(nextMilestone(0, E)).toEqual({ ...first, short: first.orders });
+
+    const last = TIERS[TIERS.length - 1]!;
+    expect(nextMilestone(last.orders - 1, E)).toEqual({ ...last, short: 1 });
   });
 
   it("returns null once every milestone is cleared", () => {
-    expect(nextMilestone(28, E)).toBeNull();
+    expect(nextMilestone(TIERS[TIERS.length - 1]!.orders, E)).toBeNull();
   });
 });

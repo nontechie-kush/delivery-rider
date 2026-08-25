@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { NODES } from "../src/sim/city.js";
 import { DEFAULT_CONFIG as E } from "../src/sim/config.js";
 import { accept, createShift, idle, startDuty, travelTo } from "../src/sim/shift.js";
 import { esc, mins, rupees, urgency } from "../src/ui/format.js";
@@ -123,7 +124,9 @@ describe("renderMap", () => {
   it("renders every node as a ride target", () => {
     const svg = renderMap(createShift(1), null);
     expect(svg).toContain("<svg");
-    expect((svg.match(/data-go=/g) ?? []).length).toBe(12);
+    // Counted from the map rather than hardcoded, so adding a venue does not
+    // fail a test that has no opinion about how many there should be.
+    expect((svg.match(/data-go=/g) ?? []).length).toBe(NODES.length);
   });
 
   it("marks where the rider is standing", () => {

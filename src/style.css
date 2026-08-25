@@ -143,6 +143,19 @@ button:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 .map .node { cursor: pointer; }
 .map .hit { fill: transparent; }
 .map .pip { fill: #39433c; stroke: #4c574f; stroke-width: 0.05; }
+/* Archetype glyphs, stroked rather than filled so they read against a pip that
+   is already solid. Twenty-two pickups need to be told apart without reading
+   twenty-two labels. */
+.map .glyph {
+  fill: none;
+  stroke: #9fb3a6;
+  stroke-width: 0.085;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+.map .pending .glyph { stroke: var(--chrome); }
+.map .here .glyph { stroke: var(--brand); }
 .map .pickup .pip { fill: #2f3f4a; stroke: #47606f; }
 .map .name {
   font-size: 0.34px;

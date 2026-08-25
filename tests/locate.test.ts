@@ -17,10 +17,21 @@ describe("nearestNode", () => {
     expect(km).toBeLessThan(0.2);
   });
 
-  it("picks something in north Gurgaon from Cyber Hub", () => {
-    const { node: n, km } = nearestNode(CYBER_HUB.lat, CYBER_HUB.lon);
-    expect(["d3", "d4", "fc"]).toContain(n.id);
-    expect(km).toBeLessThan(4);
+  /**
+   * Asserts the actual contract rather than a list of ids. The list had to be
+   * edited the moment Cyber Hub gained venues of its own, which means it was
+   * testing the fixture rather than the function.
+   */
+  it("picks the genuinely closest node, from anywhere in the zone", () => {
+    for (const at of [CYBER_HUB, SUSHANT_LOK]) {
+      const { node: n, km } = nearestNode(at.lat, at.lon);
+      const here = project(at.lat, at.lon);
+      const closest = Math.min(
+        ...NODES.map((x) => Math.hypot(x.x - here.x, x.y - here.y)),
+      );
+      expect(km).toBeCloseTo(closest, 6);
+      expect(NODES.some((x) => x.id === n.id)).toBe(true);
+    }
   });
 
   it("still returns a node from the other side of the country", () => {

@@ -1,4 +1,7 @@
-import type { SlotKind, Temp, Tier } from "./types.js";
+// Geography is static data with no dependency back on config, so this is a
+// one-way import rather than a cycle.
+import { DROPS, PICKUPS } from "./city.js";
+import type { AddressKind, SlotKind, Temp, Tier, VenueKind } from "./types.js";
 
 /**
  * Every tunable number in the game, in one place.
@@ -298,6 +301,8 @@ export interface GameConfig {
   verdictBands: { easy: number; tight: number; risky: number };
 
   /* -------------------------------------------------- behaviour by place */
+  venues: Record<VenueKind, PlaceBehaviour>;
+  addresses: Record<AddressKind, { handover: number }>;
   places: Record<string, PlaceBehaviour>;
   /** Applied to any place not listed above. */
   defaultPlace: PlaceBehaviour;
@@ -365,12 +370,18 @@ export const DEFAULT_CONFIG: GameConfig = {
   dropProximityBias: 1.4,
 
   // Straight from the platform rate cards. The step function is the whole game:
-  // order 20 is worth a fortune and order 19 is a trap. Only on-time deliveries
-  // count — without that, taking every offer dominates.
+  // the order that clears a tier is worth a fortune and the one below it is a
+  // trap. Only on-time deliveries count — without that, taking every offer
+  // dominates.
+  //
+  // Retuned from 12/20/28 when the city went from four kitchens to twenty-two.
+  // More venues spread the drops outward, which lengthened the mean leg by 19%
+  // and cost about four on-time deliveries a shift; the old top tier then sat
+  // above what a good day could reach at all.
   milestones: [
-    { orders: 12, bonus: 150 },
-    { orders: 20, bonus: 350 },
-    { orders: 28, bonus: 600 },
+    { orders: 10, bonus: 150 },
+    { orders: 17, bonus: 350 },
+    { orders: 25, bonus: 600 },
   ],
   latePayFactor: 0.5,
   dailyExpenses: 180,
@@ -490,27 +501,52 @@ export const DEFAULT_CONFIG: GameConfig = {
   queueCostPerOrder: 17,
   verdictBands: { easy: 0.45, tight: 0.7, risky: 0.92 },
 
-  places: {
-    // A dark store picks packaged goods off a shelf. Genuinely three minutes,
-    // and it barely needs to lie — which is why EXPRESS can exist at all.
-    qk: { prepMean: 3, prepSpread: 1.5, handover: 1.5, temps: ["COLD", "AMBIENT", "AMBIENT", "COLD"] },
-    // Biryani is cooked to order. Twenty-odd minutes is the honest number and
-    // the app shows you less than half of it.
-    bj: { prepMean: 22, prepSpread: 8, handover: 1.5, temps: ["HOT", "HOT", "HOT"] },
-    fc: { prepMean: 8, prepSpread: 3, handover: 1.5, temps: ["HOT", "HOT", "COLD"] },
-    gm: { prepMean: 13, prepSpread: 5, handover: 1.5, temps: ["AMBIENT", "AMBIENT", "COLD"] },
+  /**
+   * Behaviour by archetype, not by address.
+   *
+   * Listing thirty-eight places individually was fine at four kitchens and
+   * would be unreadable at twenty-two. More to the point it would be
+   * unlearnable: a player cannot memorise twenty-two prep times, but they can
+   * learn that a dark store is quick and a cloud kitchen is a coin flip, and
+   * then read any new venue off its type. `places` below still overrides a
+   * specific address where one has genuine character of its own.
+   */
+  venues: {
+    // Packaged goods off a shelf. Genuinely three minutes, and it barely needs
+    // to lie — which is why EXPRESS can exist at all.
+    darkstore: { prepMean: 3, prepSpread: 1.5, handover: 1.5, temps: ["COLD", "AMBIENT", "AMBIENT", "COLD"] },
+    grocery: { prepMean: 13, prepSpread: 5, handover: 1.5, temps: ["AMBIENT", "AMBIENT", "COLD"] },
+    // Cooked to order in a sealed handi. The slowest thing on the map and the
+    // one that most rewards knowing before you accept.
+    biryani: { prepMean: 22, prepSpread: 8, handover: 1.5, temps: ["HOT", "HOT", "HOT"] },
+    dhaba: { prepMean: 18, prepSpread: 7, handover: 2, temps: ["HOT", "HOT", "AMBIENT"] },
+    cafe: { prepMean: 8, prepSpread: 3, handover: 1.5, temps: ["HOT", "HOT", "COLD"] },
+    // A counter transaction. Fast, and almost never surprising.
+    sweets: { prepMean: 6, prepSpread: 2, handover: 1.5, temps: ["AMBIENT", "AMBIENT", "COLD"] },
+    chinese: { prepMean: 11, prepSpread: 4, handover: 1.5, temps: ["HOT", "HOT"] },
+    fastfood: { prepMean: 12, prepSpread: 4, handover: 2, temps: ["HOT", "HOT", "COLD"] },
+  },
 
-    // Drops. Handover is the honest part nobody models: a pavement handover at
-    // the metro takes two minutes, a gated Golf Course Road high-rise takes
-    // seven by the time the guard, the lift and the floor are done with you.
-    d1: { prepMean: 0, prepSpread: 0, handover: 2, temps: [] },
-    d2: { prepMean: 0, prepSpread: 0, handover: 2.5, temps: [] },
-    d3: { prepMean: 0, prepSpread: 0, handover: 3, temps: [] },
-    d4: { prepMean: 0, prepSpread: 0, handover: 6, temps: [] },
-    d5: { prepMean: 0, prepSpread: 0, handover: 7, temps: [] },
-    d6: { prepMean: 0, prepSpread: 0, handover: 5, temps: [] },
-    d7: { prepMean: 0, prepSpread: 0, handover: 3.5, temps: [] },
-    d8: { prepMean: 0, prepSpread: 0, handover: 5.5, temps: [] },
+  /**
+   * How long a building takes to let you in. The handover is the honest cost
+   * nobody models, and the address type predicts it far better than the
+   * neighbourhood does.
+   */
+  addresses: {
+    metro: { handover: 2 },
+    market: { handover: 2.5 },
+    office: { handover: 4 },
+    condo: { handover: 5 },
+    gated: { handover: 7 },
+  },
+
+  /**
+   * Per-address overrides, for the few places with character their type does
+   * not capture. Empty is the normal state — reach for the archetype first.
+   */
+  places: {
+    // Cyber Hub kitchens run a queue no dhaba elsewhere has to.
+    hp: { prepMean: 21, prepSpread: 9, handover: 2.5, temps: ["HOT", "HOT", "AMBIENT"] },
   },
   defaultPlace: { prepMean: 8, prepSpread: 3, handover: 3, temps: ["AMBIENT"] },
 };
@@ -538,8 +574,25 @@ export function runningCost(km: number, vehicle: VehicleConfig): number {
   return km * (vehicle.costPerKm + vehicle.upkeepPerKm);
 }
 
+/**
+ * What a given address behaves like: an explicit override if it has one, then
+ * its archetype, then the fallback. One resolution path, so a venue can never
+ * disagree with itself depending on who asked.
+ */
 export function placeOf(id: string, cfg: GameConfig): PlaceBehaviour {
-  return cfg.places[id] ?? cfg.defaultPlace;
+  const override = cfg.places[id];
+  if (override) return override;
+
+  const pickup = PICKUPS.find((p) => p.id === id);
+  if (pickup) return cfg.venues[pickup.venue];
+
+  const drop = DROPS.find((d) => d.id === id);
+  if (drop) {
+    // A drop has no kitchen; all it costs is the time the building takes.
+    return { prepMean: 0, prepSpread: 0, handover: cfg.addresses[drop.address].handover, temps: [] };
+  }
+
+  return cfg.defaultPlace;
 }
 
 /** Clock hour (0–23) at a given point in the day. */
