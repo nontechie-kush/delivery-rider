@@ -132,3 +132,33 @@ describe("one primary action at a time", () => {
     expect(app.innerHTML).toContain("Add to your run");
   });
 });
+
+describe("the range readout", () => {
+  beforeEach(() => {
+    document.body.innerHTML = "";
+  });
+
+  /**
+   * Fuel is a resource the player manages, so it cannot only appear once it is
+   * nearly gone. The restructure had left it in the Today overlay and as a
+   * warning below 20%, which meant a full tank showed nothing anywhere.
+   */
+  it("is on screen with a full tank, not only when low", async () => {
+    const app = await mountApp();
+    click(app.querySelector("[data-begin]"));
+
+    const fuel = app.querySelector(".stat-fuel");
+    expect(fuel).not.toBeNull();
+    expect(fuel?.textContent).toMatch(/\d+ km/);
+    expect(fuel?.className).not.toContain("low");
+    expect(app.querySelector(".fuel-bar i")).not.toBeNull();
+  });
+
+  it("stays visible while riding a job", async () => {
+    const app = await mountApp();
+    click(app.querySelector("[data-begin]"));
+    const offer = app.querySelector("[data-accept]");
+    if (offer) click(offer);
+    expect(app.querySelector(".stat-fuel")).not.toBeNull();
+  });
+});

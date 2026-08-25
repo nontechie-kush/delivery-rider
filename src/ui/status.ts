@@ -3,6 +3,7 @@ import { minutesOnlineAt } from "../sim/duty.js";
 import { node } from "../sim/city.js";
 import { nearestRefill, type ShiftState } from "../sim/shift.js";
 import { duration, esc, rupees } from "./format.js";
+import { icons } from "./icons.js";
 
 /** Distances are already kilometres — the projection does the work. */
 const km = (v: number): string => `${v.toFixed(1)} km`;
@@ -64,10 +65,11 @@ function warnings(state: ShiftState, cfg: GameConfig): string {
       out.push(`<span class="warn bad">Nearest ${word} is ${km(stop.km)} — further than you can ride</span>`);
     } else if (frac <= cfg.lowRangeWarning && stop) {
       // Offer the way there rather than only announcing the problem, the way a
-      // navigation app would.
+      // navigation app would. The remaining range is already on screen, so this
+      // says what to do about it rather than repeating the number.
       out.push(
         `<button class="warn act" data-go="${esc(stop.nodeId)}">
-           ${Math.round(state.rangeLeft)} km left · ${word} at ${esc(node(stop.nodeId).name)}, ${km(stop.km)} →
+           ${word === "swap" ? "Swap" : "Fill up"} at ${esc(node(stop.nodeId).name)}, ${km(stop.km)} →
          </button>`,
       );
     }
@@ -93,6 +95,34 @@ function warnings(state: ShiftState, cfg: GameConfig): string {
   return out.length > 0 ? `<div class="warnrow">${out.join("")}</div>` : "";
 }
 
+/**
+ * Range, always on.
+ *
+ * The restructure left this only in the Today overlay and as a warning below
+ * 20%, so on a full tank there was no fuel indicator anywhere — which is no use
+ * for a resource the player is supposed to manage. It sits in the status row as
+ * a figure and a short bar, and takes colour as it drains.
+ *
+ * A 249 km petrol tank barely moves across a 120 km day. Seventy kilometres of
+ * battery moves visibly, which is the point of the ladder.
+ */
+function rangeReadout(state: ShiftState, cfg: GameConfig): string {
+  const vehicle = vehicleOf(state.vehicleId, cfg);
+  if (vehicle.energy === "none") return "";
+
+  const frac = Math.max(0, Math.min(1, state.rangeLeft / vehicle.rangeKm));
+  const stop = nearestRefill(state);
+  const stranded = stop !== null && stop.km > state.rangeLeft;
+  const band = stranded ? "bad" : frac <= cfg.lowRangeWarning ? "low" : "";
+
+  return `
+    <span class="stat-fuel ${band}" title="${esc(vehicle.name)}">
+      ${icons.fuel}
+      <span class="fuel-km">${Math.round(state.rangeLeft)} km</span>
+      <span class="fuel-bar"><i style="width:${Math.max(3, frac * 100).toFixed(0)}%"></i></span>
+    </span>`;
+}
+
 export function statusStrip(state: ShiftState, cfg: GameConfig): string {
   const earned = state.completed.reduce((s, c) => s + c.paid, 0);
   const online = minutesOnlineAt(state.duty, state.clock);
@@ -111,6 +141,7 @@ export function statusStrip(state: ShiftState, cfg: GameConfig): string {
         <span class="stat-time">${wallClock(state, cfg)}</span>
         <span class="stat-cash">${rupees(earned)}</span>
         <span class="stat-on">${duration(online)}</span>
+        ${rangeReadout(state, cfg)}
         <span class="stat-busy ${busy.cls}">
           ${busy.word}<em>~${busy.perHour} offers/hr</em>
         </span>
