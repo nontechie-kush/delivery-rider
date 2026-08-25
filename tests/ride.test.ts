@@ -11,9 +11,10 @@ import {
   type RideInput,
 } from "../src/ride/ride.js";
 import { drawPlayerBike, drawVehicle } from "../src/ride/sprites.js";
-import { spentMinutes } from "../src/ride/screen.js";
+import { GOLDEN, NIGHT, fogAt, skyFor, spentMinutes } from "../src/ride/screen.js";
 import {
   CAMERA_HEIGHT,
+  DRAW_DISTANCE,
   buildRoad,
   curveAhead,
   percentRemaining,
@@ -862,5 +863,89 @@ describe("the ride clock", () => {
 
     expect(spentMinutes(fast, ETA)).toBeCloseTo(spentMinutes(slow, ETA), 1);
     expect(fast.z).toBeGreaterThan(slow.z * 2);
+  });
+});
+
+
+/**
+ * Distance fog.
+ *
+ * The road used to be a flat band of grey under a flat sky, which is why it
+ * read as a band rather than as distance. Fog is what dissolves the far end of
+ * it into the horizon, and it has to fall off in the shape the eye expects:
+ * nothing at all at the front wheel, almost total by the vanishing point.
+ */
+describe("distance fog", () => {
+  it("leaves the nearest road completely untouched", () => {
+    expect(fogAt(0, 4.4)).toBeCloseTo(1, 6);
+  });
+
+  it("has all but dissolved the road by the horizon", () => {
+    expect(fogAt(DRAW_DISTANCE, 4.4)).toBeLessThan(0.05);
+  });
+
+  it("thickens without ever reversing", () => {
+    let previous = Infinity;
+    for (let n = 0; n <= DRAW_DISTANCE; n += 5) {
+      const clear = fogAt(n, 4.4);
+      expect(clear).toBeLessThanOrEqual(previous);
+      previous = clear;
+    }
+  });
+
+  it("holds more in the air at night than at golden hour", () => {
+    const half = DRAW_DISTANCE / 2;
+    expect(fogAt(half, 6.2)).toBeLessThan(fogAt(half, 4.4));
+  });
+});
+
+
+/**
+ * The frame budget.
+ *
+ * A gradient object is expensive to build and identical every frame. Building
+ * one inside the draw loop is the standard way to make a canvas game stutter on
+ * a mid-range phone, and it is the kind of thing that only shows up on the
+ * device nobody tests on. So it is asserted here instead.
+ */
+describe("the sky gradient", () => {
+  /** A context that does nothing but count what gets allocated from it. */
+  const counting = () => {
+    let made = 0;
+    const ctx = {
+      createLinearGradient: () => {
+        made++;
+        return { addColorStop: () => {} } as unknown as CanvasGradient;
+      },
+    } as unknown as CanvasRenderingContext2D;
+    return { ctx, made: () => made };
+  };
+
+  // The cache is module-level, which is right for an app with one canvas but
+  // means it stays warm between tests. Each test therefore uses a height no
+  // other test uses, so its first call is always a genuine miss.
+  it("builds one gradient and reuses it for every later frame", () => {
+    const { ctx, made } = counting();
+    for (let frame = 0; frame < 500; frame++) skyFor(ctx, 1600, GOLDEN);
+    expect(made()).toBe(1);
+  });
+
+  it("rebuilds when the palette changes, and not otherwise", () => {
+    const { ctx, made } = counting();
+    skyFor(ctx, 1610, GOLDEN);
+    skyFor(ctx, 1610, GOLDEN);
+    expect(made()).toBe(1);
+
+    skyFor(ctx, 1610, NIGHT);
+    expect(made()).toBe(2);
+    skyFor(ctx, 1610, NIGHT);
+    expect(made()).toBe(2);
+  });
+
+  it("rebuilds when the canvas is resized", () => {
+    const { ctx, made } = counting();
+    skyFor(ctx, 1620, GOLDEN);
+    skyFor(ctx, 920, GOLDEN);
+    expect(made()).toBe(2);
   });
 });

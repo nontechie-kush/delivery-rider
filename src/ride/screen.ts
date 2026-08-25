@@ -38,24 +38,25 @@ import {
  */
 
 /**
- * Dusk, for the last few deliveries of a shift.
+ * Palettes, and the light in them.
  *
- * Everything sits closer together in value than it does by day, which is the
- * point: the road is emptier and faster, and it is harder to read.
+ * Every colour used to be a flat fill under a flat sky, which is why the road
+ * read as a band of grey rather than as distance. Two things change that and
+ * neither needs a new renderer: a sky that is a gradient rather than one
+ * colour, and fog that dissolves the far road into that sky's horizon.
+ *
+ * The daytime values here are the 17:00 golden-hour palette from the visual
+ * direction, hardcoded. This is the proof slice: one hour, to find out whether
+ * canvas 2D reaches the bar before the clock-driven version gets built.
  */
-const NIGHT = {
-  sky: "#070d14",
-  groundA: "#0f1712",
-  groundB: "#0d140f",
-  roadA: "#212527",
-  roadB: "#1d2123",
-  rumbleA: "#6e766f",
-  rumbleB: "#454b47",
-  lane: "#7d857f",
-};
-
-interface Palette {
-  sky: string;
+export interface Palette {
+  skyTop: string;
+  skyMid: string;
+  skyHorizon: string;
+  /** What distance dissolves into. Matches the horizon or the road goes nowhere. */
+  fog: string;
+  /** Higher is thicker. Dusk holds more in the air than midday does. */
+  fogDensity: number;
   groundA: string;
   groundB: string;
   roadA: string;
@@ -65,18 +66,73 @@ interface Palette {
   lane: string;
 }
 
-const DAY: Palette = {
-  sky: "#0d1a24",
-  groundA: "#1b2a1e",
-  groundB: "#182619",
-  roadA: "#33383a",
-  roadB: "#2e3335",
-  rumbleA: "#c9d1cc",
-  rumbleB: "#7c847f",
-  lane: "#cfd6d1",
+/** 17:00. Long light, warm dust, the hour that sells screenshots. */
+export const GOLDEN: Palette = {
+  skyTop: "#4A4A5E",
+  skyMid: "#C4643A",
+  skyHorizon: "#F0B268",
+  fog: "#D9A075",
+  fogDensity: 4.4,
+  groundA: "#3A3A2E",
+  groundB: "#33332A",
+  roadA: "#4A423C",
+  roadB: "#443C37",
+  rumbleA: "#E8DCC8",
+  rumbleB: "#9A8E7C",
+  lane: "#E8DCC8",
 };
 
-const paletteFor = (ride: RideState): Palette => (ride.night ? NIGHT : DAY);
+/** 23:00. Sodium pools with real dark between them. */
+export const NIGHT: Palette = {
+  skyTop: "#070B12",
+  skyMid: "#0B0F16",
+  skyHorizon: "#1C2028",
+  fog: "#161A20",
+  fogDensity: 6.2,
+  groundA: "#0F1712",
+  groundB: "#0D140F",
+  roadA: "#212527",
+  roadB: "#1D2123",
+  rumbleA: "#6E766F",
+  rumbleB: "#454B47",
+  lane: "#7D857F",
+};
+
+const paletteFor = (ride: RideState): Palette => (ride.night ? NIGHT : GOLDEN);
+
+/**
+ * The sky, cached.
+ *
+ * A gradient object is expensive to build and identical every frame, so it is
+ * made once per size-and-palette and reused. Allocating one inside the draw
+ * loop is the standard way to make a canvas game stutter on a mid-range phone.
+ */
+let skyCache: { key: string; grad: CanvasGradient } | null = null;
+
+export function skyFor(ctx: CanvasRenderingContext2D, h: number, pal: Palette): CanvasGradient {
+  const horizon = h / 2;
+  const key = `${horizon}|${pal.skyTop}`;
+  if (skyCache && skyCache.key === key) return skyCache.grad;
+
+  const grad = ctx.createLinearGradient(0, 0, 0, horizon);
+  grad.addColorStop(0, pal.skyTop);
+  grad.addColorStop(0.62, pal.skyMid);
+  grad.addColorStop(1, pal.skyHorizon);
+  skyCache = { key, grad };
+  return grad;
+}
+
+/**
+ * How much of a segment survives the haze between it and the camera.
+ *
+ * Exponential in the square of the distance, which is the falloff Jake
+ * Gordon's racer uses and roughly what the eye expects: nothing at your wheel,
+ * almost everything by the horizon.
+ */
+export function fogAt(n: number, density: number): number {
+  const d = n / DRAW_DISTANCE;
+  return 1 / Math.exp(d * d * density);
+}
 
 export interface RideHandle {
   cancel: () => void;
@@ -439,7 +495,11 @@ function draw(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, ride: Ri
   const pal = paletteFor(ride);
   const { width: w, height: h } = canvas;
 
-  ctx.fillStyle = pal.sky;
+  // Filled to the full height, not just to the horizon: cresting a hill puts
+  // road above the halfway line, and a sky that stopped there would leave a
+  // band of nothing behind it. The gradient clamps to its last stop below the
+  // horizon anyway, and the verge draws over it.
+  ctx.fillStyle = skyFor(ctx, h, pal);
   ctx.fillRect(0, 0, w, h);
 
   const base = segmentAt(ride.road, ride.z);
@@ -469,7 +529,7 @@ function draw(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, ride: Ri
 
     if (seg.p1.camera.z <= CAMERA_DEPTH || seg.p2.screen.y >= maxy) continue;
 
-    drawSegment(ctx, w, seg, pal);
+    drawSegment(ctx, w, seg, pal, n);
     maxy = seg.p2.screen.y;
   }
 
@@ -484,6 +544,7 @@ function drawSegment(
   width: number,
   seg: Segment,
   pal: Palette,
+  distance: number,
 ): void {
   const p1 = seg.p1.screen;
   const p2 = seg.p2.screen;
@@ -501,7 +562,10 @@ function drawSegment(
   polygon(ctx, p1.x - p1.w, p1.y, p1.x + p1.w, p1.y, p2.x + p2.w, p2.y, p2.x - p2.w, p2.y, seg.dark ? pal.roadA : pal.roadB);
 
   // Lane markings only on the light bands, so they dash as the road moves.
-  if (!seg.dark) return;
+  if (!seg.dark) {
+    fogBand(ctx, width, seg, pal, distance);
+    return;
+  }
   const l1 = (p1.w / Math.max(6, LANES)) * 0.06;
   const l2 = (p2.w / Math.max(6, LANES)) * 0.06;
   const lane1 = (p1.w * 2) / LANES;
@@ -514,6 +578,24 @@ function drawSegment(
     lx1 += lane1;
     lx2 += lane2;
   }
+
+  fogBand(ctx, width, seg, pal, distance);
+}
+
+/** Haze over one finished segment band, thickening with distance. */
+function fogBand(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  seg: Segment,
+  pal: Palette,
+  distance: number,
+): void {
+  const clear = fogAt(distance, pal.fogDensity);
+  if (clear > 0.995) return;
+  ctx.globalAlpha = 1 - clear;
+  ctx.fillStyle = pal.fog;
+  ctx.fillRect(0, seg.p2.screen.y, width, seg.p1.screen.y - seg.p2.screen.y + 1);
+  ctx.globalAlpha = 1;
 }
 
 /**
