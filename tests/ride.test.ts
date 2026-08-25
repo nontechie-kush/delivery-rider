@@ -11,7 +11,7 @@ import {
   type RideInput,
 } from "../src/ride/ride.js";
 import { drawPlayerBike, drawVehicle } from "../src/ride/sprites.js";
-import { GOLDEN, NIGHT, fogAt, skyFor, spentMinutes } from "../src/ride/screen.js";
+import { GOLDEN, NIGHT, fogAt, paletteAt, skyFor, spentMinutes } from "../src/ride/screen.js";
 import {
   CAMERA_HEIGHT,
   DRAW_DISTANCE,
@@ -46,7 +46,6 @@ function makeRide(over: Partial<Parameters<typeof createRide>[0]> = {}) {
     trafficSpeedScale: 1,
     steerScale: 1,
     brakeScale: 1,
-    night: false,
     signalWaitSeconds: C.signalWaitSeconds,
     signalRunCrashChance: C.signalRunCrashChance,
     signalRunStopChance: C.signalRunStopChance,
@@ -786,7 +785,7 @@ describe("traffic rhythm", () => {
 });
 
 describe("the end of a shift", () => {
-  const tired = { trafficCountScale: 0.6, trafficSpeedScale: 1.4, steerScale: 0.8, brakeScale: 1.3, night: true };
+  const tired = { trafficCountScale: 0.6, trafficSpeedScale: 1.4, steerScale: 0.8, brakeScale: 1.3 };
 
   it("thins the traffic and speeds it up", () => {
     const day = makeRide({ seconds: 20, pressure: 0.5, seed: 8 });
@@ -947,5 +946,65 @@ describe("the sky gradient", () => {
     skyFor(ctx, 1620, GOLDEN);
     skyFor(ctx, 920, GOLDEN);
     expect(made()).toBe(2);
+  });
+});
+
+
+/**
+ * The light through a shift.
+ *
+ * The shift runs 06:00 to 02:00, quoted on a 6-to-26 scale so the hour never
+ * wraps and the keyframes stay in order. A rider should be able to name the
+ * hour from one frame; these assert the light actually moves through the day
+ * rather than snapping between two states.
+ */
+describe("time of day", () => {
+  const luminance = (c: string): number =>
+    parseInt(c.slice(1, 3), 16) + parseInt(c.slice(3, 5), 16) + parseInt(c.slice(5, 7), 16);
+
+  it("is darkest at either end of the shift and brightest at midday", () => {
+    const dawn = luminance(paletteAt(6).skyHorizon);
+    const midday = luminance(paletteAt(13).skyHorizon);
+    const night = luminance(paletteAt(23).skyHorizon);
+
+    expect(midday).toBeGreaterThan(dawn);
+    expect(dawn).toBeGreaterThan(night);
+  });
+
+  it("blends between keyframes rather than snapping", () => {
+    // 15:00 sits between the midday and golden keyframes, so it must match
+    // neither exactly while staying inside the pair.
+    const between = paletteAt(15).skyMid;
+    expect(between).not.toBe(paletteAt(13).skyMid);
+    expect(between).not.toBe(paletteAt(17).skyMid);
+
+    const mid = luminance(between);
+    expect(mid).toBeLessThan(luminance(paletteAt(13).skyMid));
+    expect(mid).toBeGreaterThan(luminance(paletteAt(17).skyMid));
+  });
+
+  it("lands exactly on a keyframe at its own hour", () => {
+    expect(paletteAt(17)).toEqual(GOLDEN);
+    expect(paletteAt(23)).toEqual(NIGHT);
+  });
+
+  it("holds the ends rather than running off either edge", () => {
+    expect(paletteAt(0)).toEqual(paletteAt(6));
+    expect(paletteAt(99)).toEqual(paletteAt(26));
+  });
+
+  it("produces a valid colour at every minute of the shift", () => {
+    for (let h = 6; h <= 26; h += 0.05) {
+      const p = paletteAt(h);
+      for (const value of [p.skyTop, p.skyMid, p.skyHorizon, p.fog, p.roadA, p.lane]) {
+        expect(value).toMatch(/^#[0-9a-f]{6}$/);
+      }
+      expect(p.fogDensity).toBeGreaterThan(0);
+    }
+  });
+
+  it("thickens the air toward both ends of the day", () => {
+    expect(paletteAt(6).fogDensity).toBeGreaterThan(paletteAt(9).fogDensity);
+    expect(paletteAt(23).fogDensity).toBeGreaterThan(paletteAt(17).fogDensity);
   });
 });

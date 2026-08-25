@@ -87,8 +87,6 @@ export interface RideState {
   steerScale: number;
   /** Above 1 means the brakes take longer to haul the speed off. */
   brakeScale: number;
-  /** Draw it as dusk. */
-  night: boolean;
   /** Game-minutes lost to crashes. */
   minutesLost: number;
   crashes: number;
@@ -202,8 +200,6 @@ export interface RideOptions {
   trafficSpeedScale: number;
   steerScale: number;
   brakeScale: number;
-  /** Dusk, drawn darker. Cosmetic only. */
-  night: boolean;
 }
 
 /** World units per second at full throttle. */
@@ -457,7 +453,6 @@ export function createRide(opts: RideOptions): RideState {
     squeezing: false,
     steerScale: opts.steerScale,
     brakeScale: opts.brakeScale,
-    night: opts.night,
     crashes: 0,
     stagger: 0,
     done: false,

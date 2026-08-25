@@ -66,39 +66,131 @@ export interface Palette {
   lane: string;
 }
 
-/** 17:00. Long light, warm dust, the hour that sells screenshots. */
-export const GOLDEN: Palette = {
-  skyTop: "#4A4A5E",
-  skyMid: "#C4643A",
-  skyHorizon: "#F0B268",
-  fog: "#D9A075",
-  fogDensity: 4.4,
-  groundA: "#3A3A2E",
-  groundB: "#33332A",
-  roadA: "#4A423C",
-  roadB: "#443C37",
-  rumbleA: "#E8DCC8",
-  rumbleB: "#9A8E7C",
-  lane: "#E8DCC8",
+/**
+ * The day, as seven keyframes.
+ *
+ * The shift runs 06:00 to 02:00, so the hour is quoted on a 6-to-26 scale and
+ * never has to wrap. Values come straight from the visual direction; the point
+ * is that a rider should be able to name the hour from one frame with the HUD
+ * switched off.
+ */
+const KEYFRAMES: readonly (readonly [number, Palette])[] = [
+  [6, {
+    skyTop: "#1e2c3d", skyMid: "#2e4257", skyHorizon: "#7b8fa3",
+    fog: "#6a7e92", fogDensity: 6.8,
+    groundA: "#232b26", groundB: "#1e251f",
+    roadA: "#2a2e33", roadB: "#262a2e",
+    rumbleA: "#8a94a0", rumbleB: "#55606b", lane: "#7d8894",
+  }],
+  [9, {
+    skyTop: "#4a82ae", skyMid: "#6fa3c7", skyHorizon: "#c8d8e2",
+    fog: "#b3c6d4", fogDensity: 3.2,
+    groundA: "#3e4a36", groundB: "#37422f",
+    roadA: "#4a4f52", roadB: "#44494c",
+    rumbleA: "#e8ecea", rumbleB: "#98a0a2", lane: "#e4e9e6",
+  }],
+  [13, {
+    skyTop: "#7fa0b4", skyMid: "#9fb8c4", skyHorizon: "#eff2ee",
+    fog: "#dce2de", fogDensity: 4.0,
+    groundA: "#4a5240", groundB: "#434b3a",
+    roadA: "#5a5e60", roadB: "#55595b",
+    rumbleA: "#f4f6f2", rumbleB: "#a8aea8", lane: "#f0f2ee",
+  }],
+  [17, {
+    skyTop: "#4a4a5e", skyMid: "#c4643a", skyHorizon: "#f0b268",
+    fog: "#d9a075", fogDensity: 4.4,
+    groundA: "#3a3a2e", groundB: "#33332a",
+    roadA: "#4a423c", roadB: "#443c37",
+    rumbleA: "#e8dcc8", rumbleB: "#9a8e7c", lane: "#e8dcc8",
+  }],
+  [20, {
+    skyTop: "#0f1622", skyMid: "#1a2434", skyHorizon: "#2c3a4e",
+    fog: "#24303f", fogDensity: 5.6,
+    groundA: "#1a2118", groundB: "#161c15",
+    roadA: "#23272b", roadB: "#1f2326",
+    rumbleA: "#7a8288", rumbleB: "#4a5158", lane: "#8a9298",
+  }],
+  [23, {
+    skyTop: "#070b12", skyMid: "#0b0f16", skyHorizon: "#1c2028",
+    fog: "#161a20", fogDensity: 6.2,
+    groundA: "#0f1712", groundB: "#0d140f",
+    roadA: "#212527", roadB: "#1d2123",
+    rumbleA: "#6e766f", rumbleB: "#454b47", lane: "#7d857f",
+  }],
+  // 02:00. The same night, an hour colder, so the last stretch keeps drifting
+  // rather than sitting still from 23:00 onward.
+  [26, {
+    skyTop: "#05080e", skyMid: "#070a11", skyHorizon: "#14181f",
+    fog: "#0f1319", fogDensity: 7.0,
+    groundA: "#0b120e", groundB: "#090f0b",
+    roadA: "#1b1f21", roadB: "#181b1d",
+    rumbleA: "#5e665f", rumbleB: "#3a403c", lane: "#6a726c",
+  }],
+];
+
+/** Golden hour, kept named because the tests and the direction both cite it. */
+export const GOLDEN: Palette = KEYFRAMES[3]![1];
+export const NIGHT: Palette = KEYFRAMES[5]![1];
+
+// All colour literals in this file are lowercase, so a mixed palette and a
+// keyframe palette compare equal instead of differing only by spelling.
+const hex = (c: string): [number, number, number] => [
+  parseInt(c.slice(1, 3), 16),
+  parseInt(c.slice(3, 5), 16),
+  parseInt(c.slice(5, 7), 16),
+];
+
+const mixHex = (a: string, b: string, t: number): string => {
+  const [ar, ag, ab] = hex(a);
+  const [br, bg, bb] = hex(b);
+  const to = (x: number, y: number): string =>
+    Math.round(x + (y - x) * t).toString(16).padStart(2, "0");
+  return `#${to(ar, br)}${to(ag, bg)}${to(ab, bb)}`;
 };
 
-/** 23:00. Sodium pools with real dark between them. */
-export const NIGHT: Palette = {
-  skyTop: "#070B12",
-  skyMid: "#0B0F16",
-  skyHorizon: "#1C2028",
-  fog: "#161A20",
-  fogDensity: 6.2,
-  groundA: "#0F1712",
-  groundB: "#0D140F",
-  roadA: "#212527",
-  roadB: "#1D2123",
-  rumbleA: "#6E766F",
-  rumbleB: "#454B47",
-  lane: "#7D857F",
-};
+/**
+ * The palette for a moment in the day, blended between its two keyframes.
+ *
+ * Resolved once when a ride starts rather than every frame: a leg lasts
+ * seconds, so the light does not meaningfully move inside one, and holding it
+ * still keeps the sky gradient cache from rebuilding on every single frame.
+ */
+export function paletteAt(hour: number): Palette {
+  const first = KEYFRAMES[0]!;
+  const last = KEYFRAMES[KEYFRAMES.length - 1]!;
+  if (hour <= first[0]) return first[1];
+  if (hour >= last[0]) return last[1];
 
-const paletteFor = (ride: RideState): Palette => (ride.night ? NIGHT : GOLDEN);
+  let lo = first;
+  let hi = last;
+  for (let i = 0; i < KEYFRAMES.length - 1; i++) {
+    const a = KEYFRAMES[i]!;
+    const b = KEYFRAMES[i + 1]!;
+    if (hour >= a[0] && hour <= b[0]) {
+      lo = a;
+      hi = b;
+      break;
+    }
+  }
+
+  const t = (hour - lo[0]) / (hi[0] - lo[0]);
+  const a = lo[1];
+  const b = hi[1];
+  return {
+    skyTop: mixHex(a.skyTop, b.skyTop, t),
+    skyMid: mixHex(a.skyMid, b.skyMid, t),
+    skyHorizon: mixHex(a.skyHorizon, b.skyHorizon, t),
+    fog: mixHex(a.fog, b.fog, t),
+    fogDensity: a.fogDensity + (b.fogDensity - a.fogDensity) * t,
+    groundA: mixHex(a.groundA, b.groundA, t),
+    groundB: mixHex(a.groundB, b.groundB, t),
+    roadA: mixHex(a.roadA, b.roadA, t),
+    roadB: mixHex(a.roadB, b.roadB, t),
+    rumbleA: mixHex(a.rumbleA, b.rumbleA, t),
+    rumbleB: mixHex(a.rumbleB, b.rumbleB, t),
+    lane: mixHex(a.lane, b.lane, t),
+  };
+}
 
 /**
  * The sky, cached.
@@ -156,9 +248,14 @@ export function runRide(
     etaMinutes: number;
     /** Game-minutes until the tightest thing in the bag goes late, if anything is. */
     slackMinutes: number | null;
+    /** Hour of the shift on a 6-to-26 scale, which picks the light. */
+    hour: number;
   },
 ): { promise: Promise<RideResult>; handle: RideHandle } {
   const ride = createRide(opts);
+  // The light for this leg. A ride lasts seconds, so it is fixed for the
+  // duration rather than recomputed per frame.
+  const pal = paletteAt(label.hour);
 
   host.innerHTML = `
     <div class="ridewrap">
@@ -359,7 +456,7 @@ export function runRide(
       // A strike is a tap, not a hold, so it is spent the frame it is read.
       input.hit = false;
       resize(canvas);
-      draw(ctx, canvas, ride);
+      draw(ctx, canvas, ride, pal);
       meter.style.width = `${Math.min(100, (ride.z / ride.finishZ) * 100)}%`;
       speedo.textContent = String(Math.round(ride.speed * label.topSpeedKmh));
 
@@ -491,8 +588,12 @@ function polygon(
  * highest thing already drawn. Front to back with clipping is what stops far
  * segments painting over near ones, and it is why this runs at all on a phone.
  */
-function draw(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, ride: RideState): void {
-  const pal = paletteFor(ride);
+function draw(
+  ctx: CanvasRenderingContext2D,
+  canvas: HTMLCanvasElement,
+  ride: RideState,
+  pal: Palette,
+): void {
   const { width: w, height: h } = canvas;
 
   // Filled to the full height, not just to the horizon: cresting a hill puts

@@ -68,7 +68,6 @@ export async function launchRide(
       trafficSpeedScale: tired ? e.trafficSpeedScale : 1,
       steerScale: tired ? e.steerScale : 1,
       brakeScale: tired ? e.brakeScale : 1,
-      night: tired,
       load: state.carried.length / state.bag.length,
       seed: Math.floor(Math.random() * 1e9),
       signalWaitSeconds: cfg.signalWaitSeconds,
@@ -95,6 +94,8 @@ export async function launchRide(
       km,
       etaMinutes: base,
       slackMinutes: tightestSlack(state, destId),
+      // 06:00 start plus elapsed, so the scale runs 6 to 26 and never wraps.
+      hour: cfg.dayStartHour + state.clock / 60,
     },
   );
 
