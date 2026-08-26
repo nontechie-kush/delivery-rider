@@ -53,6 +53,33 @@ function point(z: number): Point {
  * straight with gentle curves, so nothing hairpin — the interest comes from the
  * traffic, not the geometry.
  */
+/**
+ * Bend strengths, graded the way the reference implementation grades them.
+ *
+ * The old generator drew uniformly from ±2.5, which meant it never once
+ * produced anything past the gentlest grade — the road curved on half its
+ * segments and none of it was strong enough to feel. Sampling a class first
+ * and an amount second is what puts a real bend in the road occasionally
+ * instead of a permanent slight drift.
+ */
+const CURVE_GRADES = [
+  { weight: 0.3, amount: 0 },
+  { weight: 0.34, amount: 2 },
+  { weight: 0.26, amount: 4 },
+  { weight: 0.1, amount: 6 },
+] as const;
+
+function pickCurve(rand: () => number): number {
+  let roll = rand();
+  for (const grade of CURVE_GRADES) {
+    if (roll < grade.weight) {
+      return grade.amount === 0 ? 0 : (rand() < 0.5 ? -1 : 1) * grade.amount * (0.65 + rand() * 0.35);
+    }
+    roll -= grade.weight;
+  }
+  return 0;
+}
+
 export function buildRoad(segmentCount: number, rand: () => number): Segment[] {
   const road: Segment[] = [];
   let curve = 0;
@@ -60,8 +87,10 @@ export function buildRoad(segmentCount: number, rand: () => number): Segment[] {
 
   for (let i = 0; i < segmentCount; i++) {
     if (hold <= 0) {
-      curve = rand() < 0.5 ? (rand() - 0.5) * 5 : 0;
-      hold = 30 + Math.floor(rand() * 60);
+      curve = pickCurve(rand);
+      // Shorter holds than before, so a bend arrives and then resolves rather
+      // than the whole road leaning one way for half a minute.
+      hold = 22 + Math.floor(rand() * 42);
     }
     hold -= 1;
 

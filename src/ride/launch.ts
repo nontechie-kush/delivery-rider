@@ -87,6 +87,8 @@ export async function launchRide(
       squeezeWidth: cfg.squeezeWidth,
       squeezeSpeedCap: cfg.squeezeSpeedCap,
       langarChance: cfg.langarChance,
+      forkMinutesMin: cfg.forkMinutesMin,
+      forkMinutesMax: cfg.forkMinutesMax,
     },
     {
       to: node(destId).name,
@@ -109,7 +111,9 @@ export async function launchRide(
   const paceFactor = cfg.ridePaceCeiling - result.pace * span;
 
   return {
-    extraMinutes: result.minutesLost + base * (paceFactor - 1),
+    // routeMinutes is signed: a rider who picked the right side of the divider
+    // arrives sooner than the map said they would.
+    extraMinutes: result.minutesLost + result.routeMinutes + base * (paceFactor - 1),
     redsRun: result.redsRun,
     bribesPaid: result.bribesPaid,
   };

@@ -235,6 +235,16 @@ export interface GameConfig {
    * only thing on the road that is on the rider's side.
    */
   langarChance: number;
+  /**
+   * What a fork is worth, in game-minutes, either way.
+   *
+   * The first thing in the ride that pays back into the simulation: until now
+   * the map chose the route and the riding could not change the outcome. Big
+   * enough that reading the road matters, small enough that a bad call is not
+   * the shift.
+   */
+  forkMinutesMin: number;
+  forkMinutesMax: number;
 
   /* ------------------------------------------------------ traffic rhythm */
   /**
@@ -488,6 +498,8 @@ export const DEFAULT_CONFIG: GameConfig = {
   squeezeWidth: 0.55,
   squeezeSpeedCap: 0.62,
   langarChance: 0.18,
+  forkMinutesMin: 0.8,
+  forkMinutesMax: 2.2,
 
   traffic: {
     breatherSecondsCalm: 1.5,

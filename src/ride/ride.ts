@@ -66,6 +66,32 @@ export interface Pickup {
   taken: boolean;
 }
 
+/**
+ * A place where the road splits and the rider has to pick.
+ *
+ * The one thing the ride layer was missing that no amount of rendering would
+ * have supplied: a curve is scenery, a fork is a decision. Out Run had these in
+ * 1986 and TX-1 in 1983, so branching inside a pseudo-3D ribbon is a solved
+ * problem — the road stays one ribbon, and the choice is simply which side of
+ * the divider you were on when you reached it.
+ *
+ * More importantly it is the first thing in the ride that feeds the simulation
+ * back. Until now the map picked the route and the riding could not change the
+ * outcome; a fork means the minutes are partly yours to win or lose.
+ */
+export interface Fork {
+  z: number;
+  /** Which side the quick, busy option is on. The other side is the long way. */
+  fastSide: -1 | 1;
+  /** Game-minutes the short way saves, and the long way costs. */
+  minutes: number;
+  /** Name shown on the gantry, per side. */
+  fastLabel: string;
+  slowLabel: string;
+  resolved: boolean;
+  took: "fast" | "slow" | null;
+}
+
 /** How the rider is dealing with whatever is in the way. */
 export interface Combat {
   /** Seconds until the next strike is available. */
@@ -96,6 +122,12 @@ export interface RideState {
   elapsed: number;
   /** Whether the rider is tucked in this frame — the renderer draws it. */
   squeezing: boolean;
+  forks: Fork[];
+  /**
+   * Minutes won or lost at the forks. Negative is time saved, which is the only
+   * number in the ride that can run in the rider's favour.
+   */
+  routeMinutes: number;
   /** Times the rider stopped at a roadside stall this leg. */
   refreshed: number;
   /** Tired hands at the end of a shift: below 1 steers slower. */
@@ -157,6 +189,10 @@ export interface PoliceStop {
 }
 
 export interface RideResult {
+  /** Minutes won or lost at forks. Negative means time saved. */
+  routeMinutes: number;
+  /** Roadside stalls taken this leg. */
+  refreshed: number;
   crashes: number;
   minutesLost: number;
   /**
@@ -199,6 +235,9 @@ export interface RideOptions {
   squeezeSpeedCap: number;
   /** Odds a roadside stall appears on a given leg. */
   langarChance: number;
+  /** Game-minutes a fork is worth, either way. */
+  forkMinutesMin: number;
+  forkMinutesMax: number;
 
   /** How hard the road should push, 0 calm to 1 the worst of the rush. */
   pressure: number;
@@ -296,6 +335,41 @@ const KIND_SPEED: Record<Hazard["kind"], number> = {
 
 /** The closing speed a full-throttle rider makes on ordinary traffic. */
 const REFERENCE_CLOSING = TOP_SPEED * 0.58;
+
+/**
+ * The two ways through, named after the choice a Gurgaon rider actually makes.
+ *
+ * Always a trade rather than a right answer: the quick way is quick because
+ * nobody sensible uses it, and it is thick with whatever made it that way.
+ */
+const ROUTES: readonly (readonly [string, string])[] = [
+  ["SERVICE LANE", "MAIN CARRIAGEWAY"],
+  ["GALLERIA CUT", "GOLF COURSE RD"],
+  ["SECTOR 29 BYPASS", "MG ROAD"],
+  ["OLD RAILWAY RD", "SOHNA ROAD"],
+];
+
+function buildForks(opts: RideOptions, finishZ: number, rand: () => number): Fork[] {
+  const forks: Fork[] = [];
+  // Roughly one decision per long leg, and none at all on a hop — a fork you
+  // meet in the first two seconds is a coin toss, not a choice.
+  const count = Math.floor((finishZ - 20000) / 55000);
+
+  for (let i = 0; i < count; i++) {
+    const span = (finishZ - 24000) / Math.max(1, count);
+    const labels = ROUTES[Math.floor(rand() * ROUTES.length)] ?? ROUTES[0]!;
+    forks.push({
+      z: 14000 + i * span + rand() * span * 0.5,
+      fastSide: rand() < 0.5 ? -1 : 1,
+      minutes: opts.forkMinutesMin + rand() * (opts.forkMinutesMax - opts.forkMinutesMin),
+      fastLabel: labels[0],
+      slowLabel: labels[1],
+      resolved: false,
+      took: null,
+    });
+  }
+  return forks;
+}
 
 /**
  * Lays out traffic as packs of rows with clear road between them.
@@ -423,6 +497,8 @@ export function createRide(opts: RideOptions): RideState {
     });
   }
 
+  const forks = buildForks(opts, finishZ, rand);
+
   // A chain or a bat lying in the road, rarely. Finding one is the reward for
   // looking where you are going rather than only at what is in front.
   const pickups: Pickup[] = [];
@@ -453,6 +529,8 @@ export function createRide(opts: RideOptions): RideState {
     hazards,
     signals,
     pickups,
+    forks,
+    routeMinutes: 0,
     combat: {
       cooldown: 0,
       swing: 0,
@@ -604,6 +682,7 @@ export function stepRide(ride: RideState, input: RideInput, dt: number): void {
   if (!staggered) checkCollisions(ride, squeezing);
   collectPickups(ride);
   checkSignals(ride);
+  checkForks(ride);
 
   if (ride.z >= ride.finishZ) ride.done = true;
 }
@@ -801,6 +880,33 @@ function checkCollisions(ride: RideState, squeezing: boolean): void {
 }
 
 /**
+ * Forks resolve as the rider crosses them, on whichever side they were on.
+ *
+ * No confirmation and no undo: the divider is there, you are left of it or
+ * right of it, and that is the decision. Taking the quick way buys minutes and
+ * buys traffic with them, which is the same trade the whole game is about.
+ */
+function checkForks(ride: RideState): void {
+  for (const f of ride.forks) {
+    if (f.resolved || ride.z < f.z) continue;
+    f.resolved = true;
+
+    const tookFast = Math.sign(ride.x) === f.fastSide;
+    f.took = tookFast ? "fast" : "slow";
+    ride.routeMinutes += tookFast ? -f.minutes : f.minutes;
+
+    // The short way is short because nobody sensible uses it. Thicken what is
+    // ahead so the saving has to be ridden for rather than simply claimed.
+    if (!tookFast) continue;
+    for (const h of ride.hazards) {
+      if (h.z > ride.z + 6000 && h.z < ride.z + 60000 && ride.rand() < 0.4) {
+        h.z -= 2600 + ride.rand() * 2600;
+      }
+    }
+  }
+}
+
+/**
  * Signals resolve as the rider crosses them.
  *
  * Come to a stop at a red and you wait it out. Cross it still moving and you
@@ -873,6 +979,10 @@ export function rideResult(ride: RideState): RideResult {
     minutesLost: Math.round(ride.minutesLost * 10) / 10,
     pace: Math.max(0, Math.min(1, expected / moving)),
     redsRun: ride.redsRun,
+    // Rounded like minutesLost, and signed: below zero means the rider read the
+    // road better than the map did.
+    routeMinutes: Math.round(ride.routeMinutes * 10) / 10,
+    refreshed: ride.refreshed,
     bribesPaid: ride.bribesPaid,
     landed: ride.combat.landed,
     taken: ride.combat.taken,

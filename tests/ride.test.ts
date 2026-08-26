@@ -63,6 +63,8 @@ function makeRide(over: Partial<Parameters<typeof createRide>[0]> = {}) {
     squeezeWidth: C.squeezeWidth,
     squeezeSpeedCap: C.squeezeSpeedCap,
     langarChance: C.langarChance,
+    forkMinutesMin: C.forkMinutesMin,
+    forkMinutesMax: C.forkMinutesMax,
     ...over,
   });
 }
@@ -670,17 +672,30 @@ describe("the horn and the squeeze", () => {
     expect(moved.truck).toBe(0);
   });
 
+  /**
+   * Compared across seeds rather than on one road. Once the bends got strong
+   * enough to throw a flat-out rider onto the verge, a single seed could have
+   * the squeezing rider genuinely quicker — correct behaviour, and useless as a
+   * baseline. The property is that the cap binds and that it is a real limit.
+   */
   it("caps speed while squeezing, which is what makes it a choice", () => {
-    const r = makeRide({ seed: 8 });
-    for (let i = 0; i < 90; i++) stepRide(r, FLAT_OUT, 1 / 60);
-    const open = r.speed;
+    let openExceededCap = 0;
 
-    const s = makeRide({ seed: 8 });
-    for (let i = 0; i < 90; i++) {
-      stepRide(s, { steer: 0, throttle: true, brake: false, squeeze: true }, 1 / 60);
+    for (let seed = 1; seed <= 20; seed++) {
+      const open = makeRide({ seed });
+      const squeezed = makeRide({ seed });
+      for (let i = 0; i < 90; i++) {
+        stepRide(open, FLAT_OUT, 1 / 60);
+        stepRide(squeezed, { steer: 0, throttle: true, brake: false, squeeze: true }, 1 / 60);
+      }
+
+      // No squeezing rider may ever pass the cap, on any road.
+      expect(squeezed.speed).toBeLessThanOrEqual(C.squeezeSpeedCap + 1e-6);
+      if (open.speed > C.squeezeSpeedCap + 1e-6) openExceededCap += 1;
     }
-    expect(s.speed).toBeLessThan(open);
-    expect(s.speed).toBeLessThanOrEqual(C.squeezeSpeedCap + 1e-6);
+
+    // And the cap has to actually cost something, or it is not a choice.
+    expect(openExceededCap).toBeGreaterThan(0);
   });
 
   it("picks up a weapon lying in the road", () => {
@@ -852,8 +867,12 @@ describe("the ride clock", () => {
   it("charges the same minutes for the same time, whatever the speed", () => {
     // Throttle buys distance, not minutes. Two riders who spend the same real
     // seconds have spent the same clock, and the fast one is simply further on.
-    const fast = makeRide({ seconds: 20, pressure: 0, load: 0, seed: 4 });
-    const slow = makeRide({ seconds: 20, pressure: 0, load: 0, seed: 4 });
+    // No police stops: a rider held at the roadside is frozen, so their clock
+    // stops with them. That is correct behaviour and it is not what is being
+    // measured here.
+    const settings = { seconds: 20, pressure: 0, load: 0, seed: 4, signalRunStopChance: 0 };
+    const fast = makeRide(settings);
+    const slow = makeRide(settings);
     const coast: RideInput = { steer: 0, throttle: false, brake: false };
 
     for (let i = 0; i < 300; i++) {
@@ -861,7 +880,12 @@ describe("the ride clock", () => {
       stepRide(slow, coast, 1 / 60);
     }
 
-    expect(spentMinutes(fast, ETA)).toBeCloseTo(spentMinutes(slow, ETA), 1);
+    // Crashes are a separate, deliberate cost on top of the clock, and a rider
+    // going flat out into a hard bend collects more of them. The property being
+    // asserted is about the clock, so it is measured without them.
+    const clockOnly = (r: typeof fast): number => spentMinutes(r, ETA) - r.minutesLost;
+
+    expect(clockOnly(fast)).toBeCloseTo(clockOnly(slow), 1);
     expect(fast.z).toBeGreaterThan(slow.z * 2);
   });
 });
@@ -1167,5 +1191,124 @@ describe("the roadside stall", () => {
       stepRide(r, { steer: 0, throttle: true, brake: false }, 1 / 60);
     }
     expect(r.combat.weapon).toBe("none");
+  });
+});
+
+/**
+ * Forks.
+ *
+ * The first thing in the ride that pays back into the simulation. Until now the
+ * map picked the route and no amount of riding could change the outcome; a fork
+ * means some of the minutes are the rider's to win or lose. A curve is scenery,
+ * a fork is a decision.
+ */
+describe("forks in the road", () => {
+  const longRide = (over = {}) => makeRide({ seconds: 40, pressure: 0.4, seed: 3, ...over });
+
+  it("puts a decision on a long leg and none on a hop", () => {
+    expect(longRide().forks.length).toBeGreaterThan(0);
+    // A fork you meet two seconds in is a coin toss, not a choice.
+    expect(makeRide({ seconds: 6, seed: 3 }).forks.length).toBe(0);
+  });
+
+  it("never puts one before the rider is up to speed", () => {
+    for (let seed = 1; seed <= 40; seed++) {
+      for (const f of longRide({ seed }).forks) expect(f.z).toBeGreaterThan(12000);
+    }
+  });
+
+  it("saves minutes for the side that took the quick way", () => {
+    const r = longRide();
+    const fork = r.forks[0]!;
+    // Sit on the quick side and cross it.
+    r.x = fork.fastSide * 0.6;
+    r.z = fork.z + 1;
+    stepRide(r, { steer: 0, throttle: false, brake: false }, 1 / 60);
+
+    expect(fork.resolved).toBe(true);
+    expect(fork.took).toBe("fast");
+    expect(r.routeMinutes).toBeLessThan(0);
+  });
+
+  it("charges minutes for the long way round", () => {
+    const r = longRide();
+    const fork = r.forks[0]!;
+    r.x = -fork.fastSide * 0.6;
+    r.z = fork.z + 1;
+    stepRide(r, { steer: 0, throttle: false, brake: false }, 1 / 60);
+
+    expect(fork.took).toBe("slow");
+    expect(r.routeMinutes).toBeGreaterThan(0);
+  });
+
+  it("makes the quick way genuinely busier, so the saving is ridden for", () => {
+    const ahead = (r: ReturnType<typeof makeRide>): number =>
+      r.hazards.filter((h) => h.z > r.z && h.z < r.z + 40000).length;
+
+    const quick = longRide();
+    const long = longRide();
+    const f = quick.forks[0]!;
+
+    quick.z = f.z + 1;
+    long.z = f.z + 1;
+    quick.x = f.fastSide * 0.6;
+    long.x = -f.fastSide * 0.6;
+
+    stepRide(quick, { steer: 0, throttle: false, brake: false }, 1 / 60);
+    stepRide(long, { steer: 0, throttle: false, brake: false }, 1 / 60);
+
+    expect(ahead(quick)).toBeGreaterThan(ahead(long));
+  });
+
+  it("resolves once and stays resolved", () => {
+    const r = longRide();
+    const fork = r.forks[0]!;
+    r.x = fork.fastSide * 0.6;
+    r.z = fork.z + 1;
+
+    for (let i = 0; i < 20; i++) stepRide(r, { steer: 0, throttle: false, brake: false }, 1 / 60);
+    const once = r.routeMinutes;
+    for (let i = 0; i < 20; i++) stepRide(r, { steer: 0, throttle: false, brake: false }, 1 / 60);
+
+    expect(r.routeMinutes).toBe(once);
+  });
+
+  it("reports the minutes back to the simulation, signed", () => {
+    const r = longRide();
+    const fork = r.forks[0]!;
+    r.x = fork.fastSide * 0.6;
+    r.z = fork.z + 1;
+    stepRide(r, { steer: 0, throttle: false, brake: false }, 1 / 60);
+
+    // Negative means the rider read the road better than the map did, and the
+    // shift clock has to actually receive that.
+    expect(rideResult(r).routeMinutes).toBeLessThan(0);
+  });
+
+  it("names both ways, and never the same name twice", () => {
+    for (let seed = 1; seed <= 30; seed++) {
+      for (const f of longRide({ seed }).forks) {
+        expect(f.fastLabel).toBeTruthy();
+        expect(f.slowLabel).toBeTruthy();
+        expect(f.fastLabel).not.toBe(f.slowLabel);
+      }
+    }
+  });
+});
+
+describe("the road itself", () => {
+  it("has bends worth steering for, not just a permanent drift", () => {
+    let a = 1;
+    const rand = () => ((a = (a * 16807) % 2147483647) / 2147483647);
+    const road = buildRoad(3000, rand);
+    const strengths = road.map((s) => Math.abs(s.curve));
+
+    // The old generator drew uniformly from ±2.5 and so never once produced
+    // anything past the gentlest grade. Half the road curved and none of it
+    // could be felt.
+    expect(Math.max(...strengths)).toBeGreaterThan(4);
+    expect(strengths.filter((c) => c > 4).length / strengths.length).toBeGreaterThan(0.05);
+    // And it still has to come back to straight, or it is a spiral.
+    expect(strengths.filter((c) => c < 0.01).length / strengths.length).toBeGreaterThan(0.1);
   });
 });

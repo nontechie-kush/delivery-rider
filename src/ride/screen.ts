@@ -634,6 +634,7 @@ function draw(
     maxy = seg.p2.screen.y;
   }
 
+  drawForks(ctx, canvas, ride, playerX);
   drawSignals(ctx, canvas, ride, playerX);
   drawPickups(ctx, canvas, ride, playerX);
   drawHazards(ctx, canvas, ride, playerX);
@@ -822,6 +823,89 @@ function drawRider(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, rid
   const c = ride.combat;
   if (c.swing <= 0) return;
   drawSwing(ctx, c.weapon, w / 2, h * 0.84, w * 0.16, c.swingSide, 1 - c.swing / 0.28);
+}
+
+/**
+ * A fork: an overhead gantry naming both ways, and the divider between them.
+ *
+ * The gantry has to be readable early — a decision you meet at the last moment
+ * is a coin toss, not a choice — so it is drawn from a long way out and the
+ * quick side is marked. The divider is what makes the choice binding: by the
+ * time you reach it you are left of it or right of it, and that is that.
+ */
+function drawForks(
+  ctx: CanvasRenderingContext2D,
+  canvas: HTMLCanvasElement,
+  ride: RideState,
+  playerX: number,
+): void {
+  const { width: w, height: h } = canvas;
+  const probe: Point = {
+    world: { x: 0, y: 0, z: 0 },
+    camera: { x: 0, y: 0, z: 0 },
+    screen: { x: 0, y: 0, w: 0, scale: 0 },
+  };
+
+  for (const f of ride.forks) {
+    const gap = f.z - ride.z;
+    if (gap < -600 || gap > 34000) continue;
+
+    probe.world.x = 0;
+    probe.world.y = 0;
+    probe.world.z = f.z;
+    project(probe, playerX, CAMERA_HEIGHT, ride.z, w, h);
+    const scale = probe.screen.w;
+    if (scale <= 2) continue;
+
+    // The divider island, sitting on the centre line.
+    if (!f.resolved) {
+      const dw = Math.max(2, scale * 0.1);
+      const dh = Math.max(3, scale * 0.34);
+      ctx.fillStyle = "#c8cdc6";
+      ctx.fillRect(probe.screen.x - dw / 2, probe.screen.y - dh, dw, dh);
+      ctx.fillStyle = "#1c1f1d";
+      for (let i = 0; i < 3; i++) {
+        ctx.fillRect(probe.screen.x - dw / 2, probe.screen.y - dh + (dh / 3) * i, dw, dh * 0.11);
+      }
+    }
+
+    // The gantry, only while it is still worth reading.
+    if (gap < 1200 || scale < 14) continue;
+    const boardW = scale * 1.5;
+    const boardH = Math.max(9, scale * 0.3);
+    const top = probe.screen.y - scale * 1.35;
+    const left = probe.screen.x - boardW / 2;
+
+    ctx.fillStyle = "rgba(10,14,12,0.9)";
+    ctx.fillRect(left, top, boardW, boardH);
+    ctx.strokeStyle = "#5c6b60";
+    ctx.lineWidth = Math.max(1, scale * 0.012);
+    ctx.strokeRect(left, top, boardW, boardH);
+    ctx.beginPath();
+    ctx.moveTo(probe.screen.x, top + boardH);
+    ctx.lineTo(probe.screen.x, probe.screen.y - scale * 0.3);
+    ctx.stroke();
+
+    const fastLeft = f.fastSide < 0;
+    ctx.font = `700 ${Math.max(7, boardH * 0.36)}px system-ui, sans-serif`;
+    ctx.textBaseline = "middle";
+
+    // Left half, then right half. The quick way is flagged, because the choice
+    // is meant to be a trade the rider understands rather than a guess.
+    ctx.textAlign = "center";
+    ctx.fillStyle = fastLeft ? "#ffd08a" : "#dfe6e0";
+    ctx.fillText(fastLeft ? f.fastLabel : f.slowLabel, left + boardW * 0.26, top + boardH * 0.38);
+    ctx.fillStyle = fastLeft ? "#ffb02e" : "#8b948c";
+    ctx.font = `600 ${Math.max(6, boardH * 0.26)}px system-ui, sans-serif`;
+    ctx.fillText(fastLeft ? "QUICK · BUSY" : "CLEAR · LONGER", left + boardW * 0.26, top + boardH * 0.74);
+
+    ctx.font = `700 ${Math.max(7, boardH * 0.36)}px system-ui, sans-serif`;
+    ctx.fillStyle = fastLeft ? "#dfe6e0" : "#ffd08a";
+    ctx.fillText(fastLeft ? f.slowLabel : f.fastLabel, left + boardW * 0.74, top + boardH * 0.38);
+    ctx.fillStyle = fastLeft ? "#8b948c" : "#ffb02e";
+    ctx.font = `600 ${Math.max(6, boardH * 0.26)}px system-ui, sans-serif`;
+    ctx.fillText(fastLeft ? "CLEAR · LONGER" : "QUICK · BUSY", left + boardW * 0.74, top + boardH * 0.74);
+  }
 }
 
 /**
