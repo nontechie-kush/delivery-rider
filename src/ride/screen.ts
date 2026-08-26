@@ -879,7 +879,36 @@ function drawPickups(
 
     const size = Math.max(2, probe.screen.w * 0.16);
     ctx.save();
-    ctx.translate(probe.screen.x, probe.screen.y - size * 0.3);
+    ctx.translate(probe.screen.x, probe.screen.y);
+
+    if (pk.kind === "langar") {
+      // A stall: a canopy on two poles with a pot under it. Drawn standing on
+      // the verge rather than spinning in the air, because it is a place and
+      // not a power-up.
+      ctx.fillStyle = "#1f2a24";
+      ctx.fillRect(-size * 0.08, -size * 1.1, size * 0.16, size * 1.1);
+      ctx.fillRect(size * 0.72, -size * 1.1, size * 0.16, size * 1.1);
+      // Canopy. Saffron, because that is the colour these actually are.
+      ctx.fillStyle = "#e8913a";
+      ctx.beginPath();
+      ctx.moveTo(-size * 0.45, -size * 1.05);
+      ctx.lineTo(size * 1.25, -size * 1.05);
+      ctx.lineTo(size * 1.05, -size * 1.35);
+      ctx.lineTo(-size * 0.25, -size * 1.35);
+      ctx.closePath();
+      ctx.fill();
+      // The pot, and a table to stand it on.
+      ctx.fillStyle = "#8d6a45";
+      ctx.fillRect(-size * 0.2, -size * 0.5, size * 1.2, size * 0.12);
+      ctx.fillStyle = "#d8dee0";
+      ctx.beginPath();
+      ctx.ellipse(size * 0.4, -size * 0.58, size * 0.3, size * 0.22, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      continue;
+    }
+
+    ctx.translate(0, -size * 0.3);
     // A slow spin, so it reads as a thing to take rather than a thing to dodge.
     ctx.rotate(Math.sin(ride.elapsed * 2 + pk.z) * 0.4);
     ctx.strokeStyle = pk.kind === "chain" ? "#c6cfc8" : "#b5763f";

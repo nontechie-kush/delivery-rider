@@ -229,6 +229,12 @@ export interface GameConfig {
   /** How much narrower the rider is while squeezing, and what it costs in speed. */
   squeezeWidth: number;
   squeezeSpeedCap: number;
+  /**
+   * Odds a chhabeel is standing at the roadside on a given leg. A stall handing
+   * out cold rose milk for free is a real Delhi-summer fixture, and it is the
+   * only thing on the road that is on the rider's side.
+   */
+  langarChance: number;
 
   /* ------------------------------------------------------ traffic rhythm */
   /**
@@ -460,7 +466,17 @@ export const DEFAULT_CONFIG: GameConfig = {
   signalRunStopChance: 0.26,
   // A scooter will move for a horn, an auto might, a truck will not, and a cow
   // has never moved for anything.
-  hornYieldChance: { bike: 0.55, auto: 0.22, car: 0.3, truck: 0, pothole: 0 },
+  hornYieldChance: {
+    bike: 0.55,
+    auto: 0.22,
+    car: 0.3,
+    truck: 0,
+    pothole: 0,
+    // Scatters at the first blast. The one thing a horn reliably works on.
+    dog: 0.9,
+    // Does not, and will not. It is the joke and it is also the truth.
+    cow: 0,
+  },
   strikeCooldown: 0.75,
   strikeReach: 0.5,
   // Bare-handed is a shove; a chain has reach; a bat has neither subtlety nor
@@ -471,6 +487,7 @@ export const DEFAULT_CONFIG: GameConfig = {
   counterStagger: 0.85,
   squeezeWidth: 0.55,
   squeezeSpeedCap: 0.62,
+  langarChance: 0.18,
 
   traffic: {
     breatherSecondsCalm: 1.5,

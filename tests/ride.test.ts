@@ -62,6 +62,7 @@ function makeRide(over: Partial<Parameters<typeof createRide>[0]> = {}) {
     counterStagger: C.counterStagger,
     squeezeWidth: C.squeezeWidth,
     squeezeSpeedCap: C.squeezeSpeedCap,
+    langarChance: C.langarChance,
     ...over,
   });
 }
@@ -1006,5 +1007,165 @@ describe("time of day", () => {
   it("thickens the air toward both ends of the day", () => {
     expect(paletteAt(6).fogDensity).toBeGreaterThan(paletteAt(9).fogDensity);
     expect(paletteAt(23).fogDensity).toBeGreaterThan(paletteAt(17).fogDensity);
+  });
+});
+
+/**
+ * The things on the road that are not traffic.
+ *
+ * A cow and a stray dog are the two hazards every Indian rider actually plans
+ * around, and they are opposites: one will not move for anything and the other
+ * will not stay still. Neither behaves like a vehicle, which is the point of
+ * having them at all.
+ */
+describe("cows and dogs", () => {
+  const findKind = (kind: "cow" | "dog") => {
+    for (let seed = 1; seed <= 200; seed++) {
+      const r = makeRide({ seconds: 30, pressure: 1, seed });
+      const h = r.hazards.find((x) => x.kind === kind);
+      if (h) return { ride: r, hazard: h };
+    }
+    return null;
+  };
+
+  it("puts both on the road", () => {
+    expect(findKind("cow")).not.toBeNull();
+    expect(findKind("dog")).not.toBeNull();
+  });
+
+  it("will not move a cow for a horn, however long it is held", () => {
+    const found = findKind("cow");
+    expect(found).not.toBeNull();
+    const { ride: r, hazard: h } = found!;
+    h.z = r.z + 1200;
+    h.x = r.x;
+    const before = h.x;
+
+    for (let i = 0; i < 300; i++) {
+      stepRide(r, { steer: 0, throttle: false, brake: true, horn: true }, 1 / 60);
+    }
+    expect(h.x).toBe(before);
+  });
+
+  it("will not move a cow for a bat either", () => {
+    const found = findKind("cow");
+    const { ride: r, hazard: h } = found!;
+    r.combat.weapon = "bat";
+    h.z = r.z + 200;
+    h.x = r.x + 0.3;
+    const before = h.x;
+
+    stepRide(r, { steer: 0, throttle: false, brake: false, hit: true }, 1 / 60);
+    expect(h.x).toBe(before);
+    // The swing still lands — it just accomplishes nothing.
+    expect(r.combat.landed).toBe(1);
+  });
+
+  it("scatters a dog at the first blast", () => {
+    let scattered = 0;
+    let tried = 0;
+    for (let seed = 1; seed <= 120; seed++) {
+      const r = makeRide({ seconds: 30, pressure: 1, seed });
+      const h = r.hazards.find((x) => x.kind === "dog");
+      if (!h) continue;
+      tried++;
+      h.z = r.z + 1200;
+      h.x = r.x;
+      h.drift = 0;
+      const before = h.x;
+      for (let i = 0; i < 30; i++) {
+        stepRide(r, { steer: 0, throttle: false, brake: true, horn: true }, 1 / 60);
+      }
+      if (Math.abs(h.x - before) > 0.1) scattered++;
+    }
+    expect(tried).toBeGreaterThan(0);
+    expect(scattered / tried).toBeGreaterThan(0.5);
+  });
+
+  it("keeps a dog crossing rather than holding a lane", () => {
+    const found = findKind("dog");
+    const { ride: r, hazard: h } = found!;
+    h.z = r.z + 40000;
+    const before = h.x;
+    for (let i = 0; i < 60; i++) {
+      stepRide(r, { steer: 0, throttle: false, brake: false }, 1 / 60);
+    }
+    expect(Math.abs(h.x - before)).toBeGreaterThan(0.05);
+  });
+
+  it("never lets a dog wander off the road entirely", () => {
+    const found = findKind("dog");
+    const { ride: r, hazard: h } = found!;
+    h.z = r.z + 60000;
+    for (let i = 0; i < 900; i++) {
+      stepRide(r, { steer: 0, throttle: false, brake: false }, 1 / 60);
+      expect(Math.abs(h.x)).toBeLessThan(1.6);
+    }
+  });
+});
+
+/**
+ * The chhabeel.
+ *
+ * The only thing on the road that is on the rider's side: a stall handing out
+ * cold rose milk for free. It buys back the rider rather than the clock, which
+ * is why it is worth most at the end of a long shift and worth nothing at the
+ * start of a fresh one.
+ */
+describe("the roadside stall", () => {
+  const withStall = () => {
+    for (let seed = 1; seed <= 300; seed++) {
+      const r = makeRide({
+        seconds: 30, seed, langarChance: 1,
+        steerScale: 0.8, brakeScale: 1.3,
+      });
+      const stall = r.pickups.find((p) => p.kind === "langar");
+      if (stall) return { ride: r, stall };
+    }
+    return null;
+  };
+
+  it("appears when the day calls for one and not otherwise", () => {
+    const never = makeRide({ seconds: 30, seed: 4, langarChance: 0 });
+    expect(never.pickups.some((p) => p.kind === "langar")).toBe(false);
+
+    const always = makeRide({ seconds: 30, seed: 4, langarChance: 1 });
+    expect(always.pickups.some((p) => p.kind === "langar")).toBe(true);
+  });
+
+  it("stands off the racing line, so taking it is a decision", () => {
+    const found = withStall();
+    expect(found).not.toBeNull();
+    expect(Math.abs(found!.stall.x)).toBeGreaterThan(0.8);
+  });
+
+  it("gives a tired rider their hands back", () => {
+    const found = withStall();
+    const { ride: r, stall } = found!;
+    expect(r.steerScale).toBeLessThan(1);
+
+    r.z = stall.z - 100;
+    r.x = stall.x;
+    r.stagger = 0.5;
+    for (let i = 0; i < 40; i++) {
+      stepRide(r, { steer: 0, throttle: true, brake: false }, 1 / 60);
+    }
+
+    expect(stall.taken).toBe(true);
+    expect(r.steerScale).toBe(1);
+    expect(r.brakeScale).toBe(1);
+    expect(r.stagger).toBe(0);
+    expect(r.refreshed).toBe(1);
+  });
+
+  it("is not a weapon, and does not land in the weapon hand", () => {
+    const found = withStall();
+    const { ride: r, stall } = found!;
+    r.z = stall.z - 100;
+    r.x = stall.x;
+    for (let i = 0; i < 40; i++) {
+      stepRide(r, { steer: 0, throttle: true, brake: false }, 1 / 60);
+    }
+    expect(r.combat.weapon).toBe("none");
   });
 });

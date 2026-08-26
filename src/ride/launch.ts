@@ -86,6 +86,7 @@ export async function launchRide(
       counterStagger: cfg.counterStagger,
       squeezeWidth: cfg.squeezeWidth,
       squeezeSpeedCap: cfg.squeezeSpeedCap,
+      langarChance: cfg.langarChance,
     },
     {
       to: node(destId).name,

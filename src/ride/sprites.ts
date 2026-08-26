@@ -108,7 +108,44 @@ function pothole(b: Brush): void {
   b.ctx.fill();
 }
 
+/**
+ * A cow, rear view, sitting exactly where it wants to be.
+ *
+ * Wide and pale so it reads at distance as something you cannot simply lean
+ * around, which is the point: the horn does nothing and a bat does nothing.
+ */
+function cow(b: Brush): void {
+  // Back legs.
+  rect(b, -0.26, 0, 0.12, 0.34, "#3a3630");
+  rect(b, 0.14, 0, 0.12, 0.34, "#3a3630");
+
+  // Body, pale and heavy.
+  rect(b, -0.4, 0.3, 0.8, 0.42, "#cfc6b4");
+  // Haunches catch the light differently to the flank.
+  rect(b, -0.4, 0.52, 0.8, 0.2, "#ded5c3");
+  // The brown patch every second cow on a Gurgaon road seems to have.
+  rect(b, -0.22, 0.36, 0.26, 0.22, "#8a6f52");
+
+  // Tail down the middle, and ears either side of the head.
+  rect(b, -0.03, 0.18, 0.06, 0.5, "#b3a894");
+  rect(b, -0.14, 0.7, 0.28, 0.18, "#cfc6b4");
+  rect(b, -0.24, 0.76, 0.1, 0.08, "#b3a894");
+  rect(b, 0.14, 0.76, 0.1, 0.08, "#b3a894");
+}
+
+/** A street dog, small and low and going sideways. */
+function dog(b: Brush): void {
+  rect(b, -0.16, 0, 0.05, 0.16, "#6b5a45");
+  rect(b, 0.11, 0, 0.05, 0.16, "#6b5a45");
+  rect(b, -0.18, 0.14, 0.36, 0.2, "#7d6a52");
+  // Head low and forward, tail up. Reads as motion even standing still.
+  rect(b, -0.26, 0.2, 0.12, 0.14, "#8a755b");
+  rect(b, 0.16, 0.3, 0.06, 0.16, "#6b5a45");
+}
+
 const PAINTERS: Record<Hazard["kind"], (b: Brush) => void> = {
+  cow,
+  dog,
   car,
   auto,
   truck,

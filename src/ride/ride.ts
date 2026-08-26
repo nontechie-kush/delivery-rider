@@ -19,8 +19,13 @@ export interface Hazard {
   x: number;
   /** Fraction of the rider's top speed this thing is doing. */
   speed: number;
-  kind: "car" | "auto" | "truck" | "bike" | "pothole";
+  kind: "car" | "auto" | "truck" | "bike" | "pothole" | "cow" | "dog";
   width: number;
+  /**
+   * Lateral drift per second, for the things that do not hold a lane. Dogs
+   * cross the road; nothing else on the map does.
+   */
+  drift?: number;
 }
 
 /**
@@ -45,11 +50,19 @@ export interface Signal {
 
 export type Weapon = "none" | "chain" | "bat";
 
+/**
+ * Something worth swerving for. Weapons are the aggressive half; a chhabeel is
+ * the other one — a roadside stall handing out cold rose milk for free, which
+ * is a real fixture of a Delhi summer and the only thing on the road that is
+ * unambiguously on the rider's side.
+ */
+export type Roadside = Weapon | "langar";
+
 /** Something lying in the road worth swerving for rather than away from. */
 export interface Pickup {
   z: number;
   x: number;
-  kind: Weapon;
+  kind: Roadside;
   taken: boolean;
 }
 
@@ -83,6 +96,8 @@ export interface RideState {
   elapsed: number;
   /** Whether the rider is tucked in this frame — the renderer draws it. */
   squeezing: boolean;
+  /** Times the rider stopped at a roadside stall this leg. */
+  refreshed: number;
   /** Tired hands at the end of a shift: below 1 steers slower. */
   steerScale: number;
   /** Above 1 means the brakes take longer to haul the speed off. */
@@ -182,6 +197,8 @@ export interface RideOptions {
   counterStagger: number;
   squeezeWidth: number;
   squeezeSpeedCap: number;
+  /** Odds a roadside stall appears on a given leg. */
+  langarChance: number;
 
   /** How hard the road should push, 0 calm to 1 the worst of the rush. */
   pressure: number;
@@ -262,12 +279,18 @@ const KIND_WIDTH: Record<Hazard["kind"], number> = {
   truck: 0.34,
   bike: 0.13,
   pothole: 0.12,
+  cow: 0.30,
+  dog: 0.11,
 };
 const KIND_SPEED: Record<Hazard["kind"], number> = {
   car: 0.42,
   auto: 0.42,
   truck: 0.32,
   bike: 0.55,
+  // Standing in the road, entirely unbothered. Speed 0 also keeps it out of
+  // the signal queue logic, which is correct: a cow does not wait for a light.
+  cow: 0,
+  dog: 0.22,
   pothole: 0,
 };
 
@@ -350,7 +373,13 @@ function buildRow(
     lanes.map((lane, i) => {
       const roll = rand();
       const kind: Hazard["kind"] =
-        roll < 0.34 ? "car" : roll < 0.55 ? "auto" : roll < 0.68 ? "truck" : roll < 0.88 ? "bike" : "pothole";
+        roll < 0.30 ? "car"
+        : roll < 0.49 ? "auto"
+        : roll < 0.61 ? "truck"
+        : roll < 0.79 ? "bike"
+        : roll < 0.87 ? "pothole"
+        : roll < 0.94 ? "dog"
+        : "cow";
       return {
         // A row is not a perfectly straight line of cars; stagger it slightly
         // in z as well so it reads as traffic rather than as a fence. Forward
@@ -358,9 +387,12 @@ function buildRow(
         // pull the reaction floor below what it promises.
         z: z + rand() * 380 + i * 60,
         x: lane + (rand() - 0.5) * spread,
-        speed: KIND_SPEED[kind] * opts.trafficSpeedScale,
+        // A cow keeps its own counsel; nothing about the hour changes it.
+        speed: KIND_SPEED[kind] * (kind === "cow" ? 1 : opts.trafficSpeedScale),
         kind,
         width: KIND_WIDTH[kind],
+        // Dogs cross; everything else holds a lane.
+        ...(kind === "dog" ? { drift: (rand() < 0.5 ? -1 : 1) * (0.28 + rand() * 0.34) } : {}),
       };
     });
 
@@ -400,6 +432,18 @@ export function createRide(opts: RideOptions): RideState {
       z: 6000 + rand() * (finishZ - 9000),
       x: (rand() - 0.5) * 1.3,
       kind: rand() < 0.6 ? "chain" : "bat",
+      taken: false,
+    });
+  }
+
+  // A chhabeel, some days. Set back toward the verge because that is where a
+  // stall stands — you have to leave the racing line to take it, which is the
+  // small decision that makes it worth anything.
+  if (rand() < opts.langarChance) {
+    pickups.push({
+      z: 5000 + rand() * Math.max(1000, finishZ - 8000),
+      x: (rand() < 0.5 ? -1 : 1) * (0.86 + rand() * 0.24),
+      kind: "langar",
       taken: false,
     });
   }
@@ -451,6 +495,7 @@ export function createRide(opts: RideOptions): RideState {
     elapsed: 0,
     minutesLost: 0,
     squeezing: false,
+    refreshed: 0,
     steerScale: opts.steerScale,
     brakeScale: opts.brakeScale,
     crashes: 0,
@@ -585,6 +630,16 @@ function moveTraffic(ride: RideState, dt: number): void {
   const queues = new Map<Signal, number>();
 
   for (const h of ride.hazards) {
+    // A dog does not use lanes. Bounce it between the verges so it is crossing
+    // rather than travelling, which is the whole hazard: it is where it was not.
+    //
+    // Gated on kind as well as on the field, so the two can never disagree —
+    // a hazard carrying a stale drift is not a dog and must not behave as one.
+    if (h.kind === "dog" && h.drift !== undefined) {
+      h.x += h.drift * dt;
+      if (h.x < -1.15 || h.x > 1.15) h.drift = -h.drift;
+    }
+
     if (h.speed <= 0) continue;
 
     const light = redAhead(ride, h.z);
@@ -675,6 +730,13 @@ function updateCombat(ride: RideState, input: RideInput, dt: number): void {
   c.swingSide = target && target.x < ride.x ? -1 : 1;
   if (!target) return;
 
+  // A cow is immovable by design. Hitting one is the joke, and it is also the
+  // truth: nothing a rider can do moves a cow that has decided to stand there.
+  if (target.kind === "cow") {
+    c.landed += 1;
+    return;
+  }
+
   const shove = ride.rules.strikeShove[c.weapon] ?? 0.5;
   target.x += c.swingSide * shove;
   c.landed += 1;
@@ -700,6 +762,18 @@ function collectPickups(ride: RideState): void {
     if (p.z > ride.z || p.z < ride.z - 500) continue;
     if (Math.abs(p.x - ride.x) > 0.42) continue;
     p.taken = true;
+
+    if (p.kind === "langar") {
+      // Cold rose milk at the roadside. It buys back the rider rather than the
+      // clock: the shake clears and tired hands work properly again for the
+      // rest of the leg, which is why it matters most at the end of a shift.
+      ride.stagger = 0;
+      ride.steerScale = 1;
+      ride.brakeScale = 1;
+      ride.refreshed += 1;
+      continue;
+    }
+
     ride.combat.weapon = p.kind;
   }
 }
@@ -716,8 +790,11 @@ function checkCollisions(ride: RideState, squeezing: boolean): void {
       // A heavier bag hits harder and takes longer to get going again.
       ride.minutesLost += CRASH_MINUTES * (1 + ride.load * 0.6);
       ride.stagger = 0.75;
-      // Shunt it aside so a single obstacle cannot hit twice.
-      h.x += h.x > ride.x ? 1.4 : -1.4;
+      // Push it behind so a single obstacle cannot hit twice. Dropping z is
+      // enough on its own — the collision window is only 420 deep — so a cow
+      // keeps its ground here too. Riding into one is the rider's problem and
+      // moves the cow not at all, which is the entire point of a cow.
+      if (h.kind !== "cow") h.x += h.x > ride.x ? 1.4 : -1.4;
       h.z -= 900;
     }
   }
