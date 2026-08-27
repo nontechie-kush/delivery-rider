@@ -245,6 +245,20 @@ export interface GameConfig {
    */
   forkMinutesMin: number;
   forkMinutesMax: number;
+  /**
+   * Width in pixels the ride is actually drawn at, before being scaled up with
+   * smoothing switched off.
+   *
+   * Detail is decisions per pixel, not pixels. At device resolution the ride
+   * fills over a million pixels a frame with about fifty authored decisions in
+   * them; the NES ran Legend of Kage in 61,440 and a person placed every one.
+   * Dropping to a small buffer costs nothing that was carrying information, and
+   * it makes hand authoring affordable — at this width a car is thirty pixels
+   * across, so its pixels can be placed by hand rather than by an artist we
+   * would have to hire. It also cuts fill cost by roughly six, which is what
+   * pays for bloom and particles later.
+   */
+  rideRenderWidth: number;
 
   /* ------------------------------------------------------ traffic rhythm */
   /**
@@ -500,6 +514,7 @@ export const DEFAULT_CONFIG: GameConfig = {
   langarChance: 0.18,
   forkMinutesMin: 0.8,
   forkMinutesMax: 2.2,
+  rideRenderWidth: 320,
 
   traffic: {
     breatherSecondsCalm: 1.5,

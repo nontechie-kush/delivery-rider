@@ -99,6 +99,7 @@ export async function launchRide(
       slackMinutes: tightestSlack(state, destId),
       // 06:00 start plus elapsed, so the scale runs 6 to 26 and never wraps.
       hour: cfg.dayStartHour + state.clock / 60,
+      renderWidth: cfg.rideRenderWidth,
     },
   );
 

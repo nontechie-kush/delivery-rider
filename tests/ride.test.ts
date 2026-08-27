@@ -11,7 +11,7 @@ import {
   type RideInput,
 } from "../src/ride/ride.js";
 import { drawPlayerBike, drawVehicle } from "../src/ride/sprites.js";
-import { GOLDEN, NIGHT, fogAt, paletteAt, skyFor, spentMinutes } from "../src/ride/screen.js";
+import { GOLDEN, NIGHT, fogAt, paletteAt, present, resize, skyFor, spentMinutes } from "../src/ride/screen.js";
 import {
   CAMERA_HEIGHT,
   DRAW_DISTANCE,
@@ -1310,5 +1310,82 @@ describe("the road itself", () => {
     expect(strengths.filter((c) => c > 4).length / strengths.length).toBeGreaterThan(0.05);
     // And it still has to come back to straight, or it is a spiral.
     expect(strengths.filter((c) => c < 0.01).length / strengths.length).toBeGreaterThan(0.1);
+  });
+});
+
+
+/**
+ * The low-resolution buffer.
+ *
+ * Detail is decisions per pixel, not pixels. The ride used to fill close to a
+ * million pixels a frame with about fifty authored decisions in them; drawing
+ * it small and scaling up hard-edged costs nothing that was carrying
+ * information, and makes a vehicle small enough that its pixels could be placed
+ * by hand.
+ */
+describe("the render buffer", () => {
+  const display = (w: number, h: number) => ({
+    width: 0, height: 0, clientWidth: w, clientHeight: h,
+  });
+
+  it("draws at the configured width, whatever the screen is", () => {
+    for (const [w, h] of [[390, 620], [1200, 500], [320, 320]] as const) {
+      const buffer = { width: 0, height: 0 };
+      resize(display(w, h), buffer, C.rideRenderWidth);
+      expect(buffer.width).toBe(C.rideRenderWidth);
+    }
+  });
+
+  it("keeps the display's aspect ratio, so nothing stretches", () => {
+    for (const [w, h] of [[390, 620], [1200, 500], [768, 1024]] as const) {
+      const screen = display(w, h);
+      const buffer = { width: 0, height: 0 };
+      resize(screen, buffer, C.rideRenderWidth);
+
+      const wanted = screen.height / screen.width;
+      const got = buffer.height / buffer.width;
+      expect(got).toBeCloseTo(wanted, 1);
+    }
+  });
+
+  it("does not grow with the screen, which is where the saving comes from", () => {
+    // The fill cost is fixed by config rather than by the device. A phone at
+    // DPR 3 and a desktop both draw the same number of pixels; only the blit
+    // gets bigger, and a blit is cheap where a fill is not.
+    const small = { width: 0, height: 0 };
+    const large = { width: 0, height: 0 };
+    resize(display(390, 620), small, C.rideRenderWidth);
+    resize(display(1560, 2480), large, C.rideRenderWidth);
+
+    expect(large.width).toBe(small.width);
+    expect(large.height).toBe(small.height);
+  });
+
+  it("never lets the buffer collapse on a tiny viewport", () => {
+    const buffer = { width: 0, height: 0 };
+    resize(display(1, 1), buffer, C.rideRenderWidth);
+    expect(buffer.width).toBeGreaterThan(0);
+    expect(buffer.height).toBeGreaterThan(0);
+  });
+
+  it("scales up with smoothing off", () => {
+    // The whole trick. Interpolating the upscale hands back exactly the soft,
+    // edgeless quality the small buffer exists to remove, and costs the fill
+    // saving as well — and it is the sort of thing that comes back silently.
+    let smoothing = true;
+    const calls: number[][] = [];
+    const ctx = {
+      set imageSmoothingEnabled(v: boolean) { smoothing = v; },
+      get imageSmoothingEnabled() { return smoothing; },
+      drawImage: (_s: never, x: number, y: number, w: number, h: number) => {
+        calls.push([x, y, w, h]);
+      },
+    };
+
+    present(ctx, { width: 780, height: 1240 }, { width: 320, height: 509 });
+
+    expect(smoothing).toBe(false);
+    // And it fills the display rather than the buffer's own size.
+    expect(calls).toEqual([[0, 0, 780, 1240]]);
   });
 });

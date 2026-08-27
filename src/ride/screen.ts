@@ -250,6 +250,8 @@ export function runRide(
     slackMinutes: number | null;
     /** Hour of the shift on a 6-to-26 scale, which picks the light. */
     hour: number;
+    /** Pixel width the ride is drawn at before being scaled up. */
+    renderWidth: number;
   },
 ): { promise: Promise<RideResult>; handle: RideHandle } {
   const ride = createRide(opts);
@@ -276,6 +278,10 @@ export function runRide(
       </div>
       <div class="ridespeed"><b>0</b><span>km/h</span></div>
       <div class="ridelight" hidden><i></i><span></span></div>
+      <div class="ridefork" hidden>
+        <b class="fk-side left"></b>
+        <b class="fk-side right"></b>
+      </div>
       <div class="ridemeter"><i></i>${label.slackMinutes === null ? "" : '<u class="ghost"></u>'}</div>
       <div class="ridecontrols">
         <div class="rc-row minor">
@@ -322,7 +328,13 @@ export function runRide(
   const police = host.querySelector<HTMLElement>(".police")!;
   const hitLabel = host.querySelector<HTMLElement>(".hit-label")!;
   const lightText = host.querySelector<HTMLElement>(".ridelight span")!;
+  const forkBox = host.querySelector<HTMLElement>(".ridefork")!;
+  const forkLeft = host.querySelector<HTMLElement>(".fk-side.left")!;
+  const forkRight = host.querySelector<HTMLElement>(".fk-side.right")!;
   const ctx = canvas.getContext("2d")!;
+  // The ride is drawn here, small, and scaled up on the way out.
+  const buffer = document.createElement("canvas");
+  const bufCtx = buffer.getContext("2d")!;
 
   const input = {
     steer: 0,
@@ -455,8 +467,9 @@ export function runRide(
 
       // A strike is a tap, not a hold, so it is spent the frame it is read.
       input.hit = false;
-      resize(canvas);
-      draw(ctx, canvas, ride, pal);
+      resize(canvas, buffer, label.renderWidth);
+      draw(bufCtx, buffer, ride, pal);
+      present(ctx, canvas, buffer);
       meter.style.width = `${Math.min(100, (ride.z / ride.finishZ) * 100)}%`;
       speedo.textContent = String(Math.round(ride.speed * label.topSpeedKmh));
 
@@ -505,6 +518,19 @@ export function runRide(
         }
       } else {
         police.hidden = true;
+      }
+
+      // Name the two ways while there is still time to pick one. A decision
+      // read at the last moment is a coin toss, so this appears early and the
+      // quick side is marked rather than left to be guessed.
+      const fork = ride.forks.find((f) => !f.resolved && f.z > ride.z && f.z - ride.z < 30000);
+      forkBox.hidden = !fork;
+      if (fork) {
+        const fastLeft = fork.fastSide < 0;
+        forkLeft.textContent = fastLeft ? fork.fastLabel : fork.slowLabel;
+        forkRight.textContent = fastLeft ? fork.slowLabel : fork.fastLabel;
+        forkLeft.className = `fk-side left ${fastLeft ? "quick" : "clear"}`;
+        forkRight.className = `fk-side right ${fastLeft ? "clear" : "quick"}`;
       }
 
       // Warn about the next light only once it is close enough to act on.
@@ -557,14 +583,59 @@ export function spentMinutes(ride: RideState, etaMinutes: number): number {
   return etaMinutes * (ride.elapsed / Math.max(0.001, expected)) + ride.minutesLost;
 }
 
-function resize(canvas: HTMLCanvasElement): void {
-  const dpr = Math.min(2, window.devicePixelRatio || 1);
-  const w = Math.floor(canvas.clientWidth * dpr);
-  const h = Math.floor(canvas.clientHeight * dpr);
+/**
+ * Sizes the display canvas and the small buffer the ride is actually drawn in.
+ *
+ * The buffer keeps the display's aspect ratio so nothing stretches, and its
+ * width is fixed by config — everything drawn inside it is therefore in buffer
+ * pixels, which is the point: at this size a vehicle is tens of pixels across
+ * rather than hundreds, and every one of them can be placed deliberately.
+ */
+/** Only what these two actually touch, so both are testable without a DOM. */
+interface Surface {
+  width: number;
+  height: number;
+}
+interface Displayed extends Surface {
+  clientWidth: number;
+  clientHeight: number;
+}
+interface Blitter {
+  imageSmoothingEnabled: boolean;
+  drawImage: (src: never, x: number, y: number, w: number, h: number) => void;
+}
+
+export function resize(canvas: Displayed, buffer: Surface, width: number): void {
+  // Guarded rather than assumed: this is reachable outside a browser, and a
+  // renderer that throws on a missing global is a renderer that cannot be
+  // tested at all.
+  const dpr =
+    typeof window === "undefined" ? 1 : Math.min(2, window.devicePixelRatio || 1);
+  const w = Math.max(1, Math.floor(canvas.clientWidth * dpr));
+  const h = Math.max(1, Math.floor(canvas.clientHeight * dpr));
   if (canvas.width !== w || canvas.height !== h) {
     canvas.width = w;
     canvas.height = h;
   }
+
+  const bw = Math.max(64, Math.round(width));
+  const bh = Math.max(64, Math.round(width * (h / w)));
+  if (buffer.width !== bw || buffer.height !== bh) {
+    buffer.width = bw;
+    buffer.height = bh;
+  }
+}
+
+/**
+ * Blits the buffer up to the display, hard-edged.
+ *
+ * Smoothing off is the whole trick. Interpolating the upscale would hand back
+ * exactly the soft, edgeless quality the small buffer exists to get rid of, and
+ * would cost the fill saving as well.
+ */
+export function present(ctx: Blitter, canvas: Surface, buffer: Surface): void {
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(buffer as never, 0, 0, canvas.width, canvas.height);
 }
 
 function polygon(
@@ -869,42 +940,30 @@ function drawForks(
       }
     }
 
-    // The gantry, only while it is still worth reading.
-    if (gap < 1200 || scale < 14) continue;
+    // The gantry itself, as a shape. The lettering lives in the DOM instead —
+    // at this buffer width canvas text would be about three pixels tall, and
+    // the readout beside the signal warning is where a rider already looks.
+    if (gap < 1200 || scale < 8) continue;
     const boardW = scale * 1.5;
-    const boardH = Math.max(9, scale * 0.3);
+    const boardH = Math.max(4, scale * 0.3);
     const top = probe.screen.y - scale * 1.35;
     const left = probe.screen.x - boardW / 2;
 
     ctx.fillStyle = "rgba(10,14,12,0.9)";
     ctx.fillRect(left, top, boardW, boardH);
-    ctx.strokeStyle = "#5c6b60";
-    ctx.lineWidth = Math.max(1, scale * 0.012);
-    ctx.strokeRect(left, top, boardW, boardH);
-    ctx.beginPath();
-    ctx.moveTo(probe.screen.x, top + boardH);
-    ctx.lineTo(probe.screen.x, probe.screen.y - scale * 0.3);
-    ctx.stroke();
-
-    const fastLeft = f.fastSide < 0;
-    ctx.font = `700 ${Math.max(7, boardH * 0.36)}px system-ui, sans-serif`;
-    ctx.textBaseline = "middle";
-
-    // Left half, then right half. The quick way is flagged, because the choice
-    // is meant to be a trade the rider understands rather than a guess.
-    ctx.textAlign = "center";
-    ctx.fillStyle = fastLeft ? "#ffd08a" : "#dfe6e0";
-    ctx.fillText(fastLeft ? f.fastLabel : f.slowLabel, left + boardW * 0.26, top + boardH * 0.38);
-    ctx.fillStyle = fastLeft ? "#ffb02e" : "#8b948c";
-    ctx.font = `600 ${Math.max(6, boardH * 0.26)}px system-ui, sans-serif`;
-    ctx.fillText(fastLeft ? "QUICK · BUSY" : "CLEAR · LONGER", left + boardW * 0.26, top + boardH * 0.74);
-
-    ctx.font = `700 ${Math.max(7, boardH * 0.36)}px system-ui, sans-serif`;
-    ctx.fillStyle = fastLeft ? "#dfe6e0" : "#ffd08a";
-    ctx.fillText(fastLeft ? f.slowLabel : f.fastLabel, left + boardW * 0.74, top + boardH * 0.38);
-    ctx.fillStyle = fastLeft ? "#8b948c" : "#ffb02e";
-    ctx.font = `600 ${Math.max(6, boardH * 0.26)}px system-ui, sans-serif`;
-    ctx.fillText(fastLeft ? "CLEAR · LONGER" : "QUICK · BUSY", left + boardW * 0.74, top + boardH * 0.74);
+    ctx.fillStyle = "#5c6b60";
+    ctx.fillRect(left, top, boardW, Math.max(1, boardH * 0.12));
+    // Legs down to the verge, and a stripe on the side that is quick.
+    ctx.fillRect(left, top, Math.max(1, scale * 0.04), boardH);
+    ctx.fillRect(left + boardW, top, Math.max(1, scale * 0.04), boardH);
+    ctx.fillStyle = "#ffb02e";
+    const half = boardW / 2;
+    ctx.fillRect(
+      f.fastSide < 0 ? left : left + half,
+      top + boardH * 0.62,
+      half,
+      Math.max(1, boardH * 0.2),
+    );
   }
 }
 

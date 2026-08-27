@@ -402,6 +402,22 @@ button:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
    The fill is how much road is behind you; the ghost is how much of the time
    budget is gone. Ahead of the ghost means arriving early, and it reads without
    any arithmetic — which is the entire reason the arrival estimate went away. */
+/* The fork readout: both ways named, the quick one marked. Sits where the
+   signal warning sits, because that is where a rider is already looking. */
+.ridefork {
+  position: absolute; top: 96px; left: 12px; right: 12px;
+  display: flex; gap: 8px; pointer-events: none;
+}
+.ridefork .fk-side {
+  flex: 1; padding: 7px 9px; font-size: 11px; font-weight: 800;
+  letter-spacing: 0.08em; text-align: center;
+  background: rgba(8, 11, 10, 0.82); border: 1px solid var(--line);
+  color: var(--dim);
+}
+.ridefork .fk-side.quick { color: var(--amber); border-color: rgba(255, 176, 46, 0.55); }
+.ridefork .fk-side.quick::after { content: " · QUICK"; opacity: 0.7; }
+.ridefork .fk-side.clear::after { content: " · CLEAR"; opacity: 0.55; }
+
 .ridemeter {
   position: absolute; top: 0; left: 0; right: 0; height: 6px;
   background: rgba(255, 255, 255, 0.12);
